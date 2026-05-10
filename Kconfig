@@ -1,0 +1,66 @@
+menu "HID Viz"
+
+config HID_VIZ
+    bool "Enable HID Viz keyboard visualization module"
+    depends on !ZMK_SPLIT || ZMK_SPLIT_ROLE_CENTRAL
+    imply USB_DEVICE_HID
+    help
+      Enables the HID Viz module which provides Raw HID communication
+      between the keyboard and a host visualization app. Includes
+      layer-state notifications, key-event notifications, and a
+      command handler for host-initiated actions.
+      On split keyboards this is enabled only on the central half.
+
+config RAW_HID_USAGE_PAGE
+    hex "Raw HID Usage Page"
+    default 0xFF60
+    depends on HID_VIZ
+
+config RAW_HID_USAGE
+    hex "Raw HID Usage"
+    default 0x61
+    depends on HID_VIZ
+
+config RAW_HID_REPORT_SIZE
+    int "Raw HID Report Size"
+    default 32
+    depends on HID_VIZ
+
+config RAW_HID_DEVICE
+    string "Raw HID Device"
+    default "HID_1"
+    depends on HID_VIZ
+
+config HID_VIZ_LAYER_EVENTS
+    bool "Send layer state change events"
+    default y
+    depends on HID_VIZ
+    help
+      Send a notification to the host whenever the active layer changes.
+
+config HID_VIZ_KEY_EVENTS
+    bool "Send key press/release events"
+    default y
+    depends on HID_VIZ
+    help
+      Send a notification to the host for every physical key press and release.
+
+config HID_VIZ_COMMANDS
+    bool "Accept commands from host"
+    default y
+    depends on HID_VIZ
+    help
+      Handle inbound commands from the host app, such as device info
+      queries and layer switching.
+
+config HID_VIZ_CONFIG_ID
+    string "Layout/config identifier"
+    default ""
+    depends on HID_VIZ_COMMANDS
+    help
+      An identifier string (e.g. a GUID or layout name) that the host
+      app can query to automatically load the correct layout definition.
+      Set this to the ID from your layout editor export, or leave empty
+      for manual layout selection in the host app.
+
+endmenu
