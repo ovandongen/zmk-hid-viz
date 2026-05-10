@@ -67,8 +67,8 @@ All options in your `.conf` file:
 |------|-------|-------------|
 | 0 | `0xFF` | Message type |
 | 1 | `0x04` | Width of each bitmask field (bytes) |
-| 2-5 | uint32 | Default layer bitmask |
-| 6-9 | uint32 | Active layer bitmask |
+| 2-5 | uint32 (LE) | Default layer bitmask (layers 0-31) |
+| 6-9 | uint32 (LE) | Active layer bitmask (layers 0-31) |
 
 **Key event** (byte[0] = `0xF1`):
 | Byte | Value | Description |
@@ -96,11 +96,15 @@ All options in your `.conf` file:
 
 **Get config ID** (byte[0] = `0xFB`): Keyboard responds with `0xFA` config ID message. Host apps use this to auto-load the matching layout definition; an empty string means manual layout selection.
 
-**Set layer** (byte[0] = `0xFC`):
+**Set layer state** (byte[0] = `0xFC`):
 | Byte | Value | Description |
 |------|-------|-------------|
 | 0 | `0xFC` | Command type |
-| 1 | uint8 | Layer index to activate |
+| 1-4 | uint32 (LE) | Layer state bitmask (bit N = layer N active, for layers 0-31) |
+
+Layer 0 is always active regardless of the bitmask. The keyboard deactivates all
+other layers and then activates every layer whose bit is set, allowing the host
+to restore a complete layer stack rather than a single layer.
 
 ## BLE Vendor Service UUIDs
 

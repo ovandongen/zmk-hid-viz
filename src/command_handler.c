@@ -5,6 +5,7 @@
 
 #include <string.h>
 #include <stdint.h>
+#include <zephyr/sys/util.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -19,7 +20,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
  *
  * Commands:
  *   0xFD - Get device info (responds with board ID and version)
- *   0xFC - Set active layer (byte[1] = layer index)
+ *   0xFC - Set layer state (bytes[1-4] = uint32 bitmask of layers to activate, LE)
  *   0xFB - Get config ID (responds with layout/config identifier string)
  *
  * Responses (keyboard -> host):
@@ -68,8 +69,8 @@ static void send_config_id(void) {
         (struct raw_hid_sent_event){.data = response_buf, .length = sizeof(response_buf)});
 }
 
-static void handle_set_layer(uint8_t layer) {
-    LOG_INF("Command: set active layer to %d", layer);
+static void handle_set_layer_state(uint32_t layer_state) {
+    LOG_INF("Command: set layer state 0x%08x", layer_state);
 
     /* Deactivate all non-default layers first */
     for (uint8_t i = 1; i < 32; i++) {
@@ -78,12 +79,14 @@ static void handle_set_layer(uint8_t layer) {
         }
     }
 
-    /* Activate the requested layer (if not the base layer) */
-    if (layer > 0) {
-        zmk_keymap_layer_activate(layer);
+    /* Activate every layer requested by the bitmask (layer 0 stays active) */
+    for (uint8_t i = 1; i < 32; i++) {
+        if (layer_state & BIT(i)) {
+            zmk_keymap_layer_activate(i);
+        }
     }
 
-    /* The layer change will trigger a zmk_layer_state_changed event,
+    /* The layer changes will trigger zmk_layer_state_changed events,
      * which the notifier will pick up and send to the host automatically. */
 }
 
@@ -107,8 +110,10 @@ static int command_handler(const zmk_event_t *eh) {
         break;
 
     case CMD_SET_LAYER:
-        if (event->length >= 2) {
-            handle_set_layer(event->data[1]);
+        if (event->length >= 5) {
+            uint32_t state;
+            memcpy(&state, &event->data[1], sizeof(uint32_t));
+            handle_set_layer_state(state);
         }
         break;
 
