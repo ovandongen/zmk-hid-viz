@@ -3,33 +3,13 @@ menu "HID Viz"
 config HID_VIZ
     bool "Enable HID Viz keyboard visualization module"
     depends on !ZMK_SPLIT || ZMK_SPLIT_ROLE_CENTRAL
-    imply USB_DEVICE_HID
+    select RAW_HID
     help
-      Enables the HID Viz module which provides Raw HID communication
-      between the keyboard and a host visualization app. Includes
-      layer-state notifications, key-event notifications, and a
-      command handler for host-initiated actions.
+      Enables the HID Viz module which provides layer-state
+      notifications, key-event notifications, and a command handler
+      for host-initiated actions, layered on top of the zmk-raw-hid
+      transport module.
       On split keyboards this is enabled only on the central half.
-
-config RAW_HID_USAGE_PAGE
-    hex "Raw HID Usage Page"
-    default 0xFF60
-    depends on HID_VIZ
-
-config RAW_HID_USAGE
-    hex "Raw HID Usage"
-    default 0x61
-    depends on HID_VIZ
-
-config RAW_HID_REPORT_SIZE
-    int "Raw HID Report Size"
-    default 32
-    depends on HID_VIZ
-
-config RAW_HID_DEVICE
-    string "Raw HID Device"
-    default "HID_1"
-    depends on HID_VIZ
 
 config HID_VIZ_LAYER_EVENTS
     bool "Send layer state change events"

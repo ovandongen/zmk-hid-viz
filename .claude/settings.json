@@ -12,7 +12,15 @@
       "Bash(curl -s \"https://raw.githubusercontent.com/srwi/zmk-keypeek-layer-notifier/main/src/layer_notifier.c\")",
       "Bash(curl -s \"https://api.github.com/repos/srwi/zmk-keypeek-layer-notifier/contents/src\")",
       "Bash(python3 -c \"import sys,json; [print\\(f['name']\\) for f in json.load\\(sys.stdin\\)]\")",
-      "Bash(curl -sL \"https://raw.githubusercontent.com/srwi/zmk-keypeek-layer-notifier/master/src/layer_notifier.c\")"
+      "Bash(curl -sL \"https://raw.githubusercontent.com/srwi/zmk-keypeek-layer-notifier/master/src/layer_notifier.c\")",
+      "Bash(curl -s https://raw.githubusercontent.com/zzeneg/zmk-raw-hid/main/include/zmk-raw-hid/events.h)",
+      "Bash(curl -s https://api.github.com/repos/zzeneg/zmk-raw-hid/contents/include)",
+      "Bash(curl -s https://api.github.com/repos/zzeneg/zmk-raw-hid/contents/include/raw_hid)",
+      "Bash(curl -s https://api.github.com/repos/zzeneg/zmk-raw-hid/contents/src)",
+      "Bash(curl -s https://raw.githubusercontent.com/zzeneg/zmk-raw-hid/main/include/raw_hid/events.h)",
+      "Bash(curl -s https://raw.githubusercontent.com/zzeneg/zmk-raw-hid/main/include/raw_hid/raw_hid.h)",
+      "Bash(curl -s https://raw.githubusercontent.com/zzeneg/zmk-raw-hid/main/README.md)",
+      "Bash(curl -s https://raw.githubusercontent.com/zzeneg/zmk-raw-hid/main/Kconfig)"
     ]
   }
 }

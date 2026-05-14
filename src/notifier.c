@@ -1,4 +1,4 @@
-#include <hid_viz/events.h>
+#include <raw_hid/events.h>
 
 #include <zmk/event_manager.h>
 #include <zmk/events/layer_state_changed.h>
