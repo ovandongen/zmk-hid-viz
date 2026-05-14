@@ -41,10 +41,11 @@ manifest:
 Add to your `.conf` file:
 
 ```
+CONFIG_RAW_HID=y
 CONFIG_HID_VIZ=y
 ```
 
-`CONFIG_HID_VIZ` selects `CONFIG_RAW_HID` automatically, so you do not need to set it separately.
+Both lines are required — `CONFIG_RAW_HID` enables the transport (provided by `zmk-raw-hid`) and `CONFIG_HID_VIZ` enables the messaging layer on top of it.
 
 Add the `raw_hid_adapter` shield (provided by zmk-raw-hid) to your left/central half in `build.yaml`:
 

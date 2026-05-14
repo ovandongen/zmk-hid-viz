@@ -2,14 +2,15 @@ menu "HID Viz"
 
 config HID_VIZ
     bool "Enable HID Viz keyboard visualization module"
-    depends on !ZMK_SPLIT || ZMK_SPLIT_ROLE_CENTRAL
-    select RAW_HID
+    depends on RAW_HID
     help
       Enables the HID Viz module which provides layer-state
       notifications, key-event notifications, and a command handler
       for host-initiated actions, layered on top of the zmk-raw-hid
-      transport module.
-      On split keyboards this is enabled only on the central half.
+      transport module. Requires CONFIG_RAW_HID=y to be set
+      explicitly alongside this option.
+      On split keyboards RAW_HID itself is enabled only on the
+      central half, which transitively gates this module.
 
 config HID_VIZ_LAYER_EVENTS
     bool "Send layer state change events"
