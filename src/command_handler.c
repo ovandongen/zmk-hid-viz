@@ -9,7 +9,8 @@
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
-
+extern volatile bool hid_viz_suppress_notifications;
+extern void send_layer_state(void);
 /*
  * Inbound command handler: receives commands from the host app over Raw HID
  * and responds or acts on them.
@@ -72,22 +73,29 @@ static void send_config_id(void) {
 static void handle_set_layer_state(uint32_t layer_state) {
     LOG_INF("Command: set layer state 0x%08x", layer_state);
 
-    /* Deactivate all non-default layers first */
+    /* Suppress intermediate layer-state notifications during the
+     * deactivate/activate cycle. Without this, each zmk_keymap_layer_deactivate
+     * triggers a zmk_layer_state_changed event, which the notifier sends as
+     * an IN report. On USB, this intermediate report (typically 0x01 = just
+     * layer 0) races with the host's outbound SetReport and can crash the
+     * nRF52840's USB peripheral. */
+    hid_viz_suppress_notifications = true;
+
     for (uint8_t i = 1; i < 32; i++) {
         if (zmk_keymap_layer_active(i)) {
             zmk_keymap_layer_deactivate(i);
         }
     }
 
-    /* Activate every layer requested by the bitmask (layer 0 stays active) */
     for (uint8_t i = 1; i < 32; i++) {
         if (layer_state & BIT(i)) {
             zmk_keymap_layer_activate(i);
         }
     }
 
-    /* The layer changes will trigger zmk_layer_state_changed events,
-     * which the notifier will pick up and send to the host automatically. */
+    /* Re-enable notifications and send one clean final state */
+    hid_viz_suppress_notifications = false;
+    send_layer_state();
 }
 
 static int command_handler(const zmk_event_t *eh) {

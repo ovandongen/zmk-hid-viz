@@ -25,10 +25,11 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define MSG_TYPE_KEY_EVENT   0xF1
 #define MAX_LAYER_CHECK      32
 
+volatile bool hid_viz_suppress_notifications = false;
 static uint8_t layer_buf[CONFIG_RAW_HID_REPORT_SIZE];
 static uint8_t key_buf[CONFIG_RAW_HID_REPORT_SIZE];
 
-static void send_layer_state(void) {
+void send_layer_state(void) {
     uint32_t layer_state = 0;
     for (uint8_t i = 0; i < MAX_LAYER_CHECK; i++) {
         if (zmk_keymap_layer_active(i)) {
@@ -66,7 +67,9 @@ static void send_key_event(uint32_t position, bool pressed) {
 
 static int layer_state_changed_listener(const zmk_event_t *eh) {
     ARG_UNUSED(eh);
-    send_layer_state();
+    if (!hid_viz_suppress_notifications) {
+        send_layer_state();
+    }
     return ZMK_EV_EVENT_BUBBLE;
 }
 
