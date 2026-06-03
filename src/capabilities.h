@@ -83,7 +83,7 @@
  * Capability descriptor — one row per capability in the manifest table
  * ============================================================ */
 struct hid_viz_cap {
-    uint8_t      type;      /* Wire byte (CMD_*/MSG_* constant) */
+    uint8_t      type;      /* Wire byte (a CMD_ or MSG_ constant) */
     uint8_t      role;      /* ROLE_* */
     uint8_t      tier;      /* TIER_* */
     uint8_t      confirm;   /* 0 or 1 */
