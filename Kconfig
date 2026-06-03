@@ -45,6 +45,18 @@ config HID_VIZ_MANIFEST
       auto-discover the device's identity and full capability surface
       (what it notifies / handles / triggers) in a single query.
 
+config HID_VIZ_EMIT
+    bool "Emit behavior (originator / triggers)"
+    default n
+    depends on HID_VIZ
+    help
+      Build the &hid_viz_emit keymap behavior, which emits a capability
+      action onto the raw HID bus on key press, fire-and-forget. Bind it
+      in your keymap, e.g. `&hid_viz_emit POINTING_DPI_SET 800`. Requires
+      a device node in your keymap (see README). Off by default; enable on
+      keyboards that originate actions (e.g. pointing/RGB) for another
+      device to fulfill.
+
 config HID_VIZ_CONFIG_ID
     string "Layout/config identifier"
     default ""

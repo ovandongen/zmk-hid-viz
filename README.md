@@ -118,6 +118,49 @@ Layer 0 is always active regardless of the bitmask. The keyboard deactivates all
 other layers and then activates every layer whose bit is set, allowing the host
 to restore a complete layer stack rather than a single layer.
 
+## Emit behavior (originator)
+
+The optional `&hid_viz_emit` behavior lets a key emit a capability action onto the
+bus, fire-and-forget — e.g. a keyboard telling a trackball to change its DPI. The
+keyboard never waits for or learns the outcome; it observes the resulting
+`*.changed` event if it cares. With no fulfiller present, the emit is a silent
+no-op.
+
+Enable it in your `.conf`:
+
+```
+CONFIG_HID_VIZ_EMIT=y
+```
+
+Add the behavior node to your keymap and bind it (the action constants come from
+the module's `dt-bindings` header):
+
+```dts
+#include <dt-bindings/hid_viz/emit.h>
+
+/ {
+    behaviors {
+        hid_viz_emit: hid_viz_emit {
+            compatible = "zmk,behavior-hid-viz-emit";
+            #binding-cells = <2>;
+        };
+    };
+};
+```
+
+Then use it in any layer. First parameter = action, second = a uint32 value:
+
+```dts
+&hid_viz_emit POINTING_DPI_SET 800        // -> 0xE1, value 800 (LE)
+&hid_viz_emit POINTING_DRAGSCROLL_SET 1   // -> 0xE9, value 1
+```
+
+Available action constants: `POINTING_DPI_SET` (0xE1), `POINTING_DPI_SETINDEX`
+(0xE2), `POINTING_DRAGSCROLL_SET` (0xE9), `POINTING_SNIPE_SET` (0xEB). The wire
+message is `[action, value_uint32_le]` — the same type byte the fulfilling
+device's handler consumes. This device lists each emitted action under
+`triggers`; routing an emit to a handler is the host hub's job.
+
 ## Credits
 
 Raw HID transport: [zmk-raw-hid](https://github.com/zzeneg/zmk-raw-hid) by zzeneg.

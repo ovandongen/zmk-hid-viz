@@ -15,4 +15,10 @@ if(CONFIG_HID_VIZ)
     if(CONFIG_HID_VIZ_MANIFEST)
         target_sources(app PRIVATE src/manifest.c)
     endif()
+
+    if(CONFIG_HID_VIZ_EMIT)
+        target_sources(app PRIVATE src/behavior_hid_viz_emit.c)
+        # Expose include/dt-bindings/hid_viz/emit.h to keymap preprocessing.
+        zephyr_include_directories(include)
+    endif()
 endif()

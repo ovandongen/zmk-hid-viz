@@ -1,0 +1,10 @@
+description: |
+  HID Viz emit behavior. On key press it emits a capability action onto the
+  raw HID bus, fire-and-forget (no ref, no reply). Two parameters:
+    param1 = action wire byte (e.g. POINTING_DPI_SET from
+             <dt-bindings/hid_viz/emit.h>)
+    param2 = a uint32 value, sent little-endian in bytes[1..4]
+
+compatible: "zmk,behavior-hid-viz-emit"
+
+include: two_param.yaml
