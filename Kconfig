@@ -32,7 +32,18 @@ config HID_VIZ_COMMANDS
     depends on HID_VIZ
     help
       Handle inbound commands from the host app, such as device info
-      queries and layer switching.
+      queries and layer switching. Also enables the layer action
+      commands setBase (0xF4), activate (0xF3), and deactivate (0xF2).
+
+config HID_VIZ_MANIFEST
+    bool "Respond to manifest queries (0xF9)"
+    default y
+    depends on HID_VIZ
+    help
+      Handle CMD_GET_MANIFEST (0xF9) commands, emitting one
+      RSP_MANIFEST_ENTRY (0xF8) report per capability. Lets the host
+      auto-discover the device's identity and full capability surface
+      (what it notifies / handles / triggers) in a single query.
 
 config HID_VIZ_CONFIG_ID
     string "Layout/config identifier"
