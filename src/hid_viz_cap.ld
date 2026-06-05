@@ -10,4 +10,11 @@
  */
 #include <zephyr/linker/iterable_sections.h>
 
-ITERABLE_SECTION_ROM(hid_viz_cap, Z_LINK_ITERABLE_SUBALIGN)
+/*
+ * Subalign is a literal 4, not Z_LINK_ITERABLE_SUBALIGN: in this Zephyr 3.5 /
+ * MoErgo build CONFIG_LINKER_ITERABLE_SUBALIGN is undefined, so that macro reaches
+ * the linker as a bare token and ld rejects it ("nonconstant expression for
+ * subsection alignment"). struct hid_viz_cap's strictest member is a pointer, so
+ * 4-byte alignment (32-bit ARM) is correct.
+ */
+ITERABLE_SECTION_ROM(hid_viz_cap, 4)
