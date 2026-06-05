@@ -12,6 +12,8 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
+#include "capabilities.h"
+
 /*
  * Outbound notifications: subscribes to ZMK core events and sends
  * layer-state and key-event messages over Raw HID.
@@ -24,6 +26,17 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define MSG_TYPE_LAYER_STATE 0xFF
 #define MSG_TYPE_KEY_EVENT   0xF1
 #define MAX_LAYER_CHECK      32
+
+/* Manifest self-registration — one notifies entry per enabled notification.
+ * Gated by the same flags that compile this file in (see CMakeLists.txt). */
+#if IS_ENABLED(CONFIG_HID_VIZ_LAYER_EVENTS)
+HID_VIZ_CAP_REGISTER(cap_core_layer_changed, MSG_LAYER_STATE, ROLE_NOTIFIES, TIER_CORE, 0,
+                     "core.layer.changed");
+#endif
+#if IS_ENABLED(CONFIG_HID_VIZ_KEY_EVENTS)
+HID_VIZ_CAP_REGISTER(cap_core_keyboard_key_event, MSG_KEY_EVENT, ROLE_NOTIFIES, TIER_OPTIONAL, 0,
+                     "core.keyboard.key.event");
+#endif
 
 volatile bool hid_viz_suppress_notifications = false;
 static uint8_t layer_buf[CONFIG_RAW_HID_REPORT_SIZE];

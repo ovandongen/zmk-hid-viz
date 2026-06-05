@@ -33,36 +33,50 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define HID_VIZ_CONFIG_ID_STR ""
 #endif
 
-/* Static capability table — rows gated by the same Kconfig flags that compile in
- * the code implementing each capability. This is the single place edited when a
- * capability is added. */
-static const struct hid_viz_cap capabilities[] = {
-#if IS_ENABLED(CONFIG_HID_VIZ_LAYER_EVENTS)
-    { MSG_LAYER_STATE,      ROLE_NOTIFIES, TIER_CORE,     0, "core.layer.changed" },
-#endif
-#if IS_ENABLED(CONFIG_HID_VIZ_COMMANDS)
-    { CMD_SET_LAYER,        ROLE_HANDLES,  TIER_CORE,     0, "core.layer.set" },
-    { CMD_LAYER_SET_BASE,   ROLE_HANDLES,  TIER_CORE,     0, "core.layer.setBase" },
-    { CMD_LAYER_ACTIVATE,   ROLE_HANDLES,  TIER_OPTIONAL, 1, "core.layer.activate" },
-    { CMD_LAYER_DEACTIVATE, ROLE_HANDLES,  TIER_OPTIONAL, 1, "core.layer.deactivate" },
-#endif
-#if IS_ENABLED(CONFIG_HID_VIZ_KEY_EVENTS)
-    { MSG_KEY_EVENT,        ROLE_NOTIFIES, TIER_OPTIONAL, 0, "core.keyboard.key.event" },
-#endif
-};
+/*
+ * v2: capabilities are no longer listed in a static table here. Each is declared
+ * with HID_VIZ_CAP_REGISTER() in the file that implements it (notifier.c,
+ * command_handler.c, layer_actions.c, behavior_hid_viz_emit_fixed.c), which lands
+ * a `struct hid_viz_cap` in the ROM iterable section walked below. IDs longer
+ * than one report (some pointing trigger IDs) are split across reports by
+ * send_manifest_entry() like any other string. Emit nodes register one entry per
+ * devicetree node, so several `dpi_*` nodes can share one action ID — those
+ * duplicates are collapsed at emit time (see seen_id()).
+ */
 
-/* Every capability ID must fit in a single report so the manifest stays compact
- * (only host-supplied identity strings ever use multi-report continuation). This
- * fails the build if a too-long ID is ever added. */
-#define ASSERT_CAP_FITS(str) \
-    BUILD_ASSERT(sizeof(str) <= MANIFEST_ENTRY_CHUNK_SIZE, \
-                 "Capability ID '" str "' does not fit one manifest report")
-ASSERT_CAP_FITS("core.layer.changed");
-ASSERT_CAP_FITS("core.layer.set");
-ASSERT_CAP_FITS("core.layer.setBase");
-ASSERT_CAP_FITS("core.layer.activate");
-ASSERT_CAP_FITS("core.layer.deactivate");
-ASSERT_CAP_FITS("core.keyboard.key.event");
+/* Upper bound on distinct capability IDs for the dedup scratch list. Far above
+ * any real device's capability count; if somehow exceeded, dedup simply stops
+ * suppressing further duplicates (a cosmetic manifest repeat, never a crash). */
+#define MANIFEST_MAX_CAPS 32
+
+/* Returns true if `id` was already seen in seen[0..*n); otherwise records it
+ * (capacity permitting) and returns false. Compares by string value, since
+ * identical IDs from different translation units are distinct string literals. */
+static bool seen_id(const char *seen[], size_t *n, const char *id) {
+    for (size_t i = 0; i < *n; i++) {
+        if (strcmp(seen[i], id) == 0) {
+            return true;
+        }
+    }
+    if (*n < MANIFEST_MAX_CAPS) {
+        seen[(*n)++] = id;
+    }
+    return false;
+}
+
+/* Count distinct capability IDs registered in the section (post-dedup), so the
+ * emit loop can flag the final logical entry with MANIFEST_FLAG_LAST. */
+static uint8_t count_caps(void) {
+    const char *seen[MANIFEST_MAX_CAPS];
+    size_t n = 0;
+    uint8_t count = 0;
+    STRUCT_SECTION_FOREACH(hid_viz_cap, c) {
+        if (!seen_id(seen, &n, c->id)) {
+            count++;
+        }
+    }
+    return count;
+}
 
 static uint8_t manifest_buf[CONFIG_RAW_HID_REPORT_SIZE];
 
@@ -122,10 +136,11 @@ static int manifest_command_handler(const zmk_event_t *eh)
     /* Compose the ordered logical sequence:
      *   0:      identity — board name (always present)
      *   1:      identity — config ID  (only if non-empty)
-     *   2..:    one entry per enabled capability
+     *   2..:    one entry per registered capability (link order, sorted by the
+     *           section variable name; triggers deduped by ID)
      */
     bool has_config_id = (strlen(HID_VIZ_CONFIG_ID_STR) > 0);
-    uint8_t cap_count  = ARRAY_SIZE(capabilities);
+    uint8_t cap_count  = count_caps();
     uint8_t total      = (uint8_t)(1 + (has_config_id ? 1 : 0) + cap_count);
     uint8_t last_idx   = (total > 0) ? (uint8_t)(total - 1) : 0;
     uint8_t seq = 0;
@@ -148,15 +163,18 @@ static int manifest_command_handler(const zmk_event_t *eh)
         seq++;
     }
 
-    /* capability entries */
-    for (uint8_t i = 0; i < cap_count; i++, seq++) {
+    /* capability entries (from the linker section; triggers deduped by ID) */
+    const char *seen[MANIFEST_MAX_CAPS];
+    size_t seen_n = 0;
+    STRUCT_SECTION_FOREACH(hid_viz_cap, c) {
+        if (seen_id(seen, &seen_n, c->id)) {
+            continue;
+        }
         if (seq >= start_idx) {
             send_manifest_entry(seq, seq == last_idx,
-                                capabilities[i].role,
-                                capabilities[i].tier,
-                                capabilities[i].confirm,
-                                capabilities[i].id);
+                                c->role, c->tier, c->confirm, c->id);
         }
+        seq++;
     }
 
     return ZMK_EV_EVENT_BUBBLE;

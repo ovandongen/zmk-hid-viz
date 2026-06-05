@@ -161,6 +161,36 @@ message is `[action, value_uint32_le]` — the same type byte the fulfilling
 device's handler consumes. This device lists each emitted action under
 `triggers`; routing an emit to a handler is the host hub's job.
 
+### Fixed form (devicetree-configured, editor-friendly)
+
+The 2-cell form above needs a `#include` and two keymap parameters on the key,
+which the **MoErgo Glove80 Layout Editor** can't place. For that workflow there's
+a **zero-cell** sibling, `zmk,behavior-hid-viz-emit-fixed`: the action and value
+live on the node as devicetree properties, so you paste one node into the editor's
+*custom behaviors / custom devicetree* box and bind it by label — no include, no
+parameters on the key.
+
+```dts
+/ {
+    behaviors {
+        dpi_800: dpi_800 {
+            compatible = "zmk,behavior-hid-viz-emit-fixed";
+            #binding-cells = <0>;
+            action = "core.pointing.dpi.set";   // string enum (capability ID)
+            value  = <800>;                       // uint32, sent little-endian
+        };
+    };
+};
+```
+
+Then bind `&dpi_800` on any key. `action` is one of the capability ID strings
+`"core.pointing.dpi.set"`, `"core.pointing.dpi.setIndex"`,
+`"core.pointing.dragScroll.set"`, `"core.pointing.snipe.set"` (mapped to the same
+wire bytes as the constants above; an unknown string fails the devicetree build).
+Both forms share `CONFIG_HID_VIZ_EMIT` and the same `[action, value_uint32_le]`
+wire message. Each fixed node also self-registers its action under `triggers` in
+the manifest automatically — declare the node and the device advertises it.
+
 ## Credits
 
 Raw HID transport: [zmk-raw-hid](https://github.com/zzeneg/zmk-raw-hid) by zzeneg.

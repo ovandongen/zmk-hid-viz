@@ -3,6 +3,11 @@ if(CONFIG_HID_VIZ)
         message(FATAL_ERROR "zmk-hid-viz requires CONFIG_RAW_HID=y. Add zmk-raw-hid to your west projects list and enable CONFIG_RAW_HID=y in your .conf.")
     endif()
 
+    # ROM iterable section that collects HID_VIZ_CAP_REGISTER() entries from
+    # whichever source files below get compiled in. Always present (harmless when
+    # empty); manifest.c walks it. See src/hid_viz_cap.ld.
+    zephyr_linker_sources(SECTIONS src/hid_viz_cap.ld)
+
     if(CONFIG_HID_VIZ_LAYER_EVENTS OR CONFIG_HID_VIZ_KEY_EVENTS)
         target_sources(app PRIVATE src/notifier.c)
     endif()
@@ -17,7 +22,9 @@ if(CONFIG_HID_VIZ)
     endif()
 
     if(CONFIG_HID_VIZ_EMIT)
+        target_sources(app PRIVATE src/emit_send.c)
         target_sources(app PRIVATE src/behavior_hid_viz_emit.c)
+        target_sources(app PRIVATE src/behavior_hid_viz_emit_fixed.c)
         # Expose include/dt-bindings/hid_viz/emit.h to keymap preprocessing.
         zephyr_include_directories(include)
     endif()

@@ -2,12 +2,21 @@
 
 #include <stdint.h>
 
+#include <zephyr/sys/util.h>               /* BUILD_ASSERT, _CONCAT, MIN */
+#include <zephyr/sys/iterable_sections.h>  /* STRUCT_SECTION_ITERABLE / _FOREACH / _COUNT */
+
 /*
  * Capability registry — single source of truth for the wire constants and the
- * capability descriptor used by the manifest. New code (manifest.c,
- * layer_actions.c) includes this header; the pre-existing notifier.c and
- * command_handler.c keep their own local #defines (identical values), so this
- * header is purely additive and breaks nothing.
+ * capability descriptor used by the manifest.
+ *
+ * v2 (self-registration): every file that implements a capability registers it
+ * with HID_VIZ_CAP_REGISTER(), which drops a `struct hid_viz_cap` into a ROM
+ * iterable linker section (see src/hid_viz_cap.ld). manifest.c iterates that
+ * section instead of consulting a central table, so declaring a capability and
+ * advertising it are the same line of code, living next to the implementation
+ * (its Kconfig gating travels with it). The legacy notifier.c / command_handler.c
+ * now include this header too — their pre-existing local #defines carry identical
+ * values, so redefinition is harmless.
  */
 
 /* ============================================================
@@ -89,3 +98,61 @@ struct hid_viz_cap {
     uint8_t      confirm;   /* 0 or 1 */
     const char  *id;        /* Null-terminated capability ID string */
 };
+
+/* ============================================================
+ * Self-registration into the ROM iterable section `hid_viz_cap`.
+ *
+ * Usage (file scope, in the file that implements the capability):
+ *   HID_VIZ_CAP_REGISTER(cap_core_layer_set, CMD_SET_LAYER,
+ *                        ROLE_HANDLES, TIER_CORE, 0, "core.layer.set");
+ *
+ * `_name` must be unique within its translation unit (it names the static
+ * section variable). IDs longer than one report (e.g. the longer pointing
+ * trigger IDs) are fine — send_manifest_entry() splits them across reports like
+ * any other string; the BUILD_ASSERT only catches a grossly malformed ID. The
+ * entry is `static` + `__used`, so the linker keeps it even though nothing
+ * references it by symbol — manifest.c reaches it via the section.
+ * ============================================================ */
+#define HID_VIZ_CAP_ID_MAX_SIZE 64   /* incl. null; longer is a bug, not a long ID */
+
+#define HID_VIZ_CAP_REGISTER(_name, _type, _role, _tier, _confirm, _id)        \
+    BUILD_ASSERT(sizeof(_id) <= HID_VIZ_CAP_ID_MAX_SIZE,                        \
+                 "Capability ID unreasonably long: " _id);                     \
+    static STRUCT_SECTION_ITERABLE(hid_viz_cap, _name) = {                      \
+        .type = (_type), .role = (_role), .tier = (_tier),                     \
+        .confirm = (_confirm), .id = (_id),                                    \
+    }
+
+/* ============================================================
+ * Emit action table — maps the `action` string-enum index of the
+ * zmk,behavior-hid-viz-emit-fixed binding to its wire byte, tier, and ID.
+ *
+ * The index ORDER here MUST match the `enum:` list in
+ * dts/bindings/behaviors/zmk,behavior-hid-viz-emit-fixed.yaml. The wire bytes
+ * mirror <dt-bindings/hid_viz/emit.h> (the 2-cell &hid_viz_emit form's params).
+ *
+ * The HID_VIZ_ACTION_* macros are integer/string literals, so ACTION_* below
+ * resolve at compile time and are usable in static initializers (config structs
+ * and the HID_VIZ_CAP_REGISTER trigger entries).
+ * ============================================================ */
+#define HID_VIZ_ACTION_0_BYTE  0xE1
+#define HID_VIZ_ACTION_0_TIER  TIER_CORE
+#define HID_VIZ_ACTION_0_ID    "core.pointing.dpi.set"
+
+#define HID_VIZ_ACTION_1_BYTE  0xE2
+#define HID_VIZ_ACTION_1_TIER  TIER_CORE
+#define HID_VIZ_ACTION_1_ID    "core.pointing.dpi.setIndex"
+
+#define HID_VIZ_ACTION_2_BYTE  0xE9
+#define HID_VIZ_ACTION_2_TIER  TIER_FW_SPECIFIC
+#define HID_VIZ_ACTION_2_ID    "core.pointing.dragScroll.set"
+
+#define HID_VIZ_ACTION_3_BYTE  0xEB
+#define HID_VIZ_ACTION_3_TIER  TIER_FW_SPECIFIC
+#define HID_VIZ_ACTION_3_ID    "core.pointing.snipe.set"
+
+/* idx -> wire byte / tier / id string (idx = DT_INST_ENUM_IDX(n, action)).
+ * Double-indirection via _CONCAT expands `idx` before pasting. */
+#define HID_VIZ_ACTION_BYTE(idx)  _CONCAT(_CONCAT(HID_VIZ_ACTION_, idx), _BYTE)
+#define HID_VIZ_ACTION_TIER(idx)  _CONCAT(_CONCAT(HID_VIZ_ACTION_, idx), _TIER)
+#define HID_VIZ_ACTION_ID(idx)    _CONCAT(_CONCAT(HID_VIZ_ACTION_, idx), _ID)

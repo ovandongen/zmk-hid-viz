@@ -1,0 +1,35 @@
+description: |
+  HID Viz fixed (devicetree-configured) emit behavior. A zero-cell sibling of
+  zmk,behavior-hid-viz-emit: the action and value are set as devicetree
+  properties on the node instead of as keymap parameters, so the behavior can be
+  placed and bound by label (e.g. &dpi_800) without a constant #include on the
+  key. This is the form usable from the MoErgo Glove80 Layout Editor's custom
+  behaviors / custom devicetree facility.
+
+    action = "core.pointing.dpi.set";   // string enum -> wire byte at compile time
+    value  = <800>;                       // uint32, sent little-endian
+
+  On press it emits the same wire message as the 2-cell form, so the device also
+  advertises the action as a `triggers` capability in its manifest.
+
+compatible: "zmk,behavior-hid-viz-emit-fixed"
+
+include: zero_param.yaml
+
+properties:
+  action:
+    type: string
+    required: true
+    description: |
+      Capability ID of the action to emit. The enum ORDER must stay in sync with
+      the HID_VIZ_ACTION_* table in src/capabilities.h (the index maps to the
+      wire byte and tier at compile time).
+    enum:
+      - "core.pointing.dpi.set"
+      - "core.pointing.dpi.setIndex"
+      - "core.pointing.dragScroll.set"
+      - "core.pointing.snipe.set"
+  value:
+    type: int
+    required: true
+    description: The uint32 value to send little-endian in bytes[1..4].

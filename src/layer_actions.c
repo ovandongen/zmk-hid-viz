@@ -35,6 +35,14 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define HID_VIZ_OK   1
 #define HID_VIZ_FAIL 0
 
+/* Manifest self-registration — the layer-action handlers this file implements. */
+HID_VIZ_CAP_REGISTER(cap_core_layer_setbase, CMD_LAYER_SET_BASE, ROLE_HANDLES, TIER_CORE, 0,
+                     "core.layer.setBase");
+HID_VIZ_CAP_REGISTER(cap_core_layer_activate, CMD_LAYER_ACTIVATE, ROLE_HANDLES, TIER_OPTIONAL, 1,
+                     "core.layer.activate");
+HID_VIZ_CAP_REGISTER(cap_core_layer_deactivate, CMD_LAYER_DEACTIVATE, ROLE_HANDLES, TIER_OPTIONAL, 1,
+                     "core.layer.deactivate");
+
 static uint8_t confirm_buf[CONFIG_RAW_HID_REPORT_SIZE];
 
 static void send_confirm(uint16_t ref, uint8_t ok) {

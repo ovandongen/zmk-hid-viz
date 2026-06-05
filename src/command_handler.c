@@ -9,8 +9,16 @@
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
+
+#include "capabilities.h"
+
 extern volatile bool hid_viz_suppress_notifications;
 extern void send_layer_state(void);
+
+/* Manifest self-registration. The local #defines below mirror capabilities.h's
+ * values exactly, so the redefinitions are harmless. */
+HID_VIZ_CAP_REGISTER(cap_core_layer_set, CMD_SET_LAYER, ROLE_HANDLES, TIER_CORE, 0,
+                     "core.layer.set");
 /*
  * Inbound command handler: receives commands from the host app over Raw HID
  * and responds or acts on them.
