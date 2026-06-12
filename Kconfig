@@ -57,6 +57,19 @@ config HID_VIZ_EMIT
       keyboards that originate actions (e.g. pointing/RGB) for another
       device to fulfill.
 
+config HID_VIZ_RGB
+    bool "RGB profile (core.rgb.*)"
+    default n
+    depends on HID_VIZ
+    depends on ZMK_RGB_UNDERGLOW
+    help
+      Handle core.rgb.set (0xD1) commands from the host — global on/off,
+      hue/saturation/brightness, and effect index against the stock ZMK
+      underglow API — and emit a core.rgb.changed (0xD0) receipt after
+      applying. Global RGB only: per-key colour on ZMK is derived locally
+      from layer state, so hosts change that picture via core.layer.*
+      instead. Enable on boards with RGB underglow.
+
 config HID_VIZ_CONFIG_ID
     string "Layout/config identifier"
     default ""

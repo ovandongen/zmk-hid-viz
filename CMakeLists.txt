@@ -17,6 +17,10 @@ if(CONFIG_HID_VIZ)
         target_sources(app PRIVATE src/layer_actions.c)
     endif()
 
+    if(CONFIG_HID_VIZ_RGB)
+        target_sources(app PRIVATE src/rgb_actions.c)
+    endif()
+
     if(CONFIG_HID_VIZ_MANIFEST)
         target_sources(app PRIVATE src/manifest.c)
     endif()

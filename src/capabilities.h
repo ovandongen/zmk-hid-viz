@@ -57,6 +57,15 @@
 #define CMD_SET_LAYER        0xFC   /* core.layer.set (full bitmask) */
 
 /* ============================================================
+ * Wire type bytes — RGB profile (M5, CONFIG_HID_VIZ_RGB)
+ * 0xD2 (core.rgb.setKey) is reserved for QMK RGB Matrix devices and is
+ * never implemented or advertised by ZMK — per-key colour on ZMK is
+ * locally derived from layer state (drive it via core.layer.*).
+ * ============================================================ */
+#define MSG_RGB_CHANGED      0xD0   /* core.rgb.changed { on, h, s, v, effect } */
+#define CMD_RGB_SET          0xD1   /* core.rgb.set     { on?, h?, s?, v?, effect? } */
+
+/* ============================================================
  * Wire type bytes — M1 additions
  * ============================================================ */
 #define CMD_GET_MANIFEST     0xF9   /* Request manifest stream */

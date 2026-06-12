@@ -66,6 +66,7 @@ All options in your `.conf` file:
 | `CONFIG_HID_VIZ_LAYER_EVENTS` | y | Send layer state notifications |
 | `CONFIG_HID_VIZ_KEY_EVENTS` | y | Send key press/release events |
 | `CONFIG_HID_VIZ_COMMANDS` | y | Accept commands from host app |
+| `CONFIG_HID_VIZ_RGB` | n | RGB profile: handle `0xD1` set commands, emit `0xD0` change receipts (requires `CONFIG_ZMK_RGB_UNDERGLOW=y`) |
 | `CONFIG_HID_VIZ_CONFIG_ID` | "" | Layout/config identifier returned by the `0xFB` query |
 
 Raw HID transport options (`CONFIG_RAW_HID_USAGE_PAGE`, `CONFIG_RAW_HID_USAGE`, `CONFIG_RAW_HID_REPORT_SIZE`, `CONFIG_RAW_HID_DEVICE`) are owned by zmk-raw-hid — see its README for defaults and tuning.
@@ -102,6 +103,22 @@ Raw HID transport options (`CONFIG_RAW_HID_USAGE_PAGE`, `CONFIG_RAW_HID_USAGE`, 
 | 0 | `0xFA` | Message type |
 | 1+ | string | Layout/config ID from `CONFIG_HID_VIZ_CONFIG_ID` (null-terminated, empty if unset) |
 
+**RGB changed** (byte[0] = `0xD0`, requires `CONFIG_HID_VIZ_RGB`):
+| Byte | Value | Description |
+|------|-------|-------------|
+| 0 | `0xD0` | Message type (`core.rgb.changed`) |
+| 1 | 0/1 | Underglow on/off |
+| 2-3 | uint16 (LE) | Hue (0-359) |
+| 4 | uint8 | Saturation (0-100) |
+| 5 | uint8 | Brightness (0-100) |
+| 6 | uint8 | Effect index |
+
+Sent as the receipt after every `0xD1` set. Stock ZMK has no HSB/effect getter,
+so h/s/v/effect reflect the last value set *through this module*; changes made
+by `&rgb_ug` keymap behaviours bypass it and desync the report (on/off is
+always live). When the effect index selects a per-key/layer mode (fork
+firmware), the reported hue/saturation are dormant — treat them as advisory.
+
 ### Inbound (host → keyboard)
 
 **Get device info** (byte[0] = `0xFD`): Keyboard responds with `0xFE` device info message.
@@ -117,6 +134,27 @@ Raw HID transport options (`CONFIG_RAW_HID_USAGE_PAGE`, `CONFIG_RAW_HID_USAGE`, 
 Layer 0 is always active regardless of the bitmask. The keyboard deactivates all
 other layers and then activates every layer whose bit is set, allowing the host
 to restore a complete layer stack rather than a single layer.
+
+**RGB set** (byte[0] = `0xD1`, requires `CONFIG_HID_VIZ_RGB`):
+| Byte | Value | Description |
+|------|-------|-------------|
+| 0 | `0xD1` | Command type (`core.rgb.set`) |
+| 1 | bitmask | Fields present: bit0=on, bit1=h, bit2=s, bit3=v, bit4=effect |
+| 2 | 0/1 | Underglow on/off |
+| 3-4 | uint16 (LE) | Hue (0-359) |
+| 5 | uint8 | Saturation (0-100) |
+| 6 | uint8 | Brightness (0-100) |
+| 7 | uint8 | Effect index |
+
+Absolute and idempotent. Byte positions are fixed; bytes whose mask bit is
+clear are ignored and the corresponding setting keeps its current value.
+Colour/effect are applied before on/off, so `{on=1, h, s, v}` switches on
+showing the new colour. The keyboard always replies with a `0xD0` changed
+receipt — sending an empty mask (`0x00`) applies nothing and therefore acts
+as a state query. Per-key colour is deliberately not exposed: on ZMK the
+per-key picture derives locally from layer state, so hosts change it with the
+layer commands above (`0xD2` / `core.rgb.setKey` is reserved for QMK RGB
+Matrix devices).
 
 ## Emit behavior (originator)
 
