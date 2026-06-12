@@ -54,6 +54,15 @@ CMD_LAYER_SET_BASE = 0xF4
 CMD_LAYER_ACTIVATE = 0xF3
 CMD_LAYER_DEACTIVATE = 0xF2
 RSP_CONFIRM = 0xF7
+MSG_RGB_CHANGED = 0xD0
+CMD_RGB_SET = 0xD1
+
+# CMD_RGB_SET field-mask bits (byte[1]; field positions are fixed)
+RGB_FIELD_ON = 0x01      # byte[2]
+RGB_FIELD_H = 0x02       # byte[3-4] uint16 LE, 0-359
+RGB_FIELD_S = 0x04       # byte[5], 0-100
+RGB_FIELD_V = 0x08       # byte[6], 0-100
+RGB_FIELD_EFFECT = 0x10  # byte[7]
 
 # --- Emitted action bytes (&hid_viz_emit; mirror of dt-bindings/hid_viz/emit.h)
 EMIT_ACTION_NAMES = {
@@ -202,6 +211,23 @@ def fmt_emit(r):
     )
 
 
+def parse_rgb_changed(r):
+    return {
+        "on": r[1],
+        "h": r[2] | (r[3] << 8),
+        "s": r[4],
+        "v": r[5],
+        "effect": r[6],
+    }
+
+
+def fmt_rgb_changed(r):
+    st = parse_rgb_changed(r)
+    return "0xD0 rgb.changed    on=%d h=%d s=%d v=%d effect=%d" % (
+        st["on"], st["h"], st["s"], st["v"], st["effect"],
+    )
+
+
 def fmt_other(r):
     return "0x%02X (%d bytes) %s" % (r[0], len(r), r[:8].hex(" "))
 
@@ -216,6 +242,8 @@ def print_reports(reports, label):
             print("     " + fmt_confirm(r))
         elif t == MSG_KEY_EVENT:
             print("     0xF1 key.event      pos=%d pressed=%d" % (r[2], r[3]))
+        elif t == MSG_RGB_CHANGED:
+            print("     " + fmt_rgb_changed(r))
         elif t in EMIT_ACTION_NAMES:
             print("     " + fmt_emit(r))
         else:
@@ -302,6 +330,53 @@ def test_deactivate(dev, ref, layer):
         print("  !! no 0xF7 confirm seen")
 
 
+def rgb_set(dev, mask, on=0, h=0, s=0, v=0, effect=0, label="rgb.set"):
+    """Send one 0xD1 and return the parsed 0xD0 receipt (None if absent)."""
+    send(dev, [
+        CMD_RGB_SET, mask, on & 0xFF,
+        h & 0xFF, (h >> 8) & 0xFF,
+        s & 0xFF, v & 0xFF, effect & 0xFF,
+    ])
+    reports = drain(dev)
+    print_reports(reports, label)
+    for r in reports:
+        if r[0] == MSG_RGB_CHANGED:
+            return parse_rgb_changed(r)
+    return None
+
+
+def test_rgb(dev):
+    print("\n== RGB (0xD1 core.rgb.set / 0xD0 core.rgb.changed) ==")
+
+    # 1. Empty mask = apply nothing, receipt only -> the state-query path.
+    print("  -> query (mask=0x00)")
+    orig = rgb_set(dev, 0x00, label="query receipt")
+    if orig is None:
+        print("  !! no 0xD0 receipt (is CONFIG_HID_VIZ_RGB=y and the firmware flashed?)")
+        return
+    print("     NOTE: h/s/v/effect are module-tracked statics; they desync from")
+    print("     flash-restored state and &rgb_ug/Magic+T changes until first set.")
+
+    # 2. Visible set: on, green-ish, half brightness.
+    print("  -> set on=1 h=120 s=100 v=50 (should show green)")
+    st = rgb_set(dev, RGB_FIELD_ON | RGB_FIELD_H | RGB_FIELD_S | RGB_FIELD_V,
+                 on=1, h=120, s=100, v=50, label="set receipt")
+    if st is None:
+        print("  !! no 0xD0 receipt after set")
+        return
+    if (st["on"], st["h"], st["s"], st["v"]) != (1, 120, 100, 50):
+        print("  !! receipt mismatch: expected on=1 h=120 s=100 v=50")
+
+    time.sleep(5)  # leave the colour visible for a moment
+
+    # 3. Restore what the query reported (best effort, given the desync note).
+    print("  -> restore on=%d h=%d s=%d v=%d effect=%d" % (
+        orig["on"], orig["h"], orig["s"], orig["v"], orig["effect"]))
+    rgb_set(dev, RGB_FIELD_ON | RGB_FIELD_H | RGB_FIELD_S | RGB_FIELD_V | RGB_FIELD_EFFECT,
+            on=orig["on"], h=orig["h"], s=orig["s"], v=orig["v"],
+            effect=orig["effect"], label="restore receipt")
+
+
 def listen(dev, seconds):
     print("\n== Listening for %ds (press keys / change layers) ==" % seconds)
     deadline = time.time() + seconds
@@ -334,8 +409,9 @@ def main():
                     help="layer index for activate/deactivate")
     ap.add_argument("--listen", type=int, metavar="SECONDS",
                     help="passively print notifications for N seconds, then exit")
-    ap.add_argument("--only", choices=["manifest", "setbase", "activate", "deactivate"],
-                    help="run a single test instead of the full sequence")
+    ap.add_argument("--only", choices=["manifest", "setbase", "activate", "deactivate", "rgb"],
+                    help="run a single test instead of the full sequence "
+                         "(rgb is never part of the full sequence — run it explicitly)")
     args = ap.parse_args()
 
     if args.list_all:
@@ -360,6 +436,8 @@ def main():
             test_activate(dev, 1, args.act_layer)
         elif args.only == "deactivate":
             test_deactivate(dev, 2, args.act_layer)
+        elif args.only == "rgb":
+            test_rgb(dev)
         else:
             test_manifest(dev)
             test_setbase(dev, args.layer)

@@ -2,9 +2,12 @@
 
 #include <zmk/event_manager.h>
 #include <zmk/rgb_underglow.h>
+#include <zmk/behavior.h>
+#include <dt-bindings/zmk/rgb.h>
 
 #include <string.h>
 #include <stdint.h>
+#include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
 
 #include <zephyr/logging/log.h>
@@ -42,6 +45,15 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
  *
  * `speed` is omitted in v1 — ZMK only has a relative change_spd(), which
  * doesn't fit an absolute, idempotent set.
+ *
+ * SPLIT NOTE: changes are applied by invoking the `rgb_ug` behavior via
+ * zmk_behavior_invoke_binding(), NOT by calling the zmk_rgb_underglow_* API
+ * directly. The behavior has BEHAVIOR_LOCALITY_GLOBAL, so the invocation is
+ * relayed to every split peripheral (each half runs its own underglow
+ * instance) before running locally — same path as a `&rgb_ug` keymap key.
+ * A direct API call would only light the central half. The MoErgo fork has
+ * absolute commands for the whole surface: RGB_ON/OFF_CMD,
+ * RGB_COLOR_HSB_CMD, and RGB_EFS_CMD (absolute effect select).
  */
 
 /* Manifest self-registration — gated by CONFIG_HID_VIZ_RGB via CMakeLists. */
@@ -94,32 +106,47 @@ static void send_rgb_changed(void) {
         (struct raw_hid_sent_event){.data = rgb_buf, .length = sizeof(rgb_buf)});
 }
 
+/* Invoke the rgb_ug behavior (press only — its release handler is a no-op).
+ * Returns the local invocation's result; peripheral relays are
+ * fire-and-forget inside zmk_behavior_invoke_binding(). */
+static int rgb_behavior(uint32_t cmd, uint32_t param) {
+    struct zmk_behavior_binding binding = {
+        .behavior_dev = "rgb_ug",
+        .param1 = cmd,
+        .param2 = param,
+    };
+    struct zmk_behavior_binding_event event = {
+        .layer = 0,
+        .position = 0,
+        .timestamp = k_uptime_get(),
+    };
+    return zmk_behavior_invoke_binding(&binding, event, true);
+}
+
 static void handle_rgb_set(const uint8_t *data) {
     uint8_t fields = data[1];
 
     LOG_INF("Command: rgb set mask=0x%02x", fields);
 
     if (fields & (RGB_SET_FIELD_H | RGB_SET_FIELD_S | RGB_SET_FIELD_V)) {
-        /* Absent fields keep their last-set value so set_hsb() (which takes
-         * the full triple) doesn't clobber them. */
-        struct zmk_led_hsb color = {
-            .h = (fields & RGB_SET_FIELD_H)
-                     ? MIN((uint16_t)data[3] | ((uint16_t)data[4] << 8), RGB_HUE_MAX)
-                     : cur_h,
-            .s = (fields & RGB_SET_FIELD_S) ? MIN(data[5], RGB_SAT_MAX) : cur_s,
-            .b = (fields & RGB_SET_FIELD_V) ? MIN(data[6], RGB_BRT_MAX) : cur_v,
-        };
-        if (zmk_rgb_underglow_set_hsb(color) == 0) {
-            cur_h = color.h;
-            cur_s = color.s;
-            cur_v = color.b;
+        /* Absent fields keep their last-set value so the full HSB triple the
+         * behavior takes doesn't clobber them. */
+        uint16_t h = (fields & RGB_SET_FIELD_H)
+                         ? MIN((uint16_t)data[3] | ((uint16_t)data[4] << 8), RGB_HUE_MAX)
+                         : cur_h;
+        uint8_t s = (fields & RGB_SET_FIELD_S) ? MIN(data[5], RGB_SAT_MAX) : cur_s;
+        uint8_t v = (fields & RGB_SET_FIELD_V) ? MIN(data[6], RGB_BRT_MAX) : cur_v;
+        if (rgb_behavior(RGB_COLOR_HSB_CMD, RGB_COLOR_HSB_VAL(h, s, v)) == 0) {
+            cur_h = h;
+            cur_s = s;
+            cur_v = v;
         } else {
-            LOG_WRN("rgb set: set_hsb(%u,%u,%u) rejected", color.h, color.s, color.b);
+            LOG_WRN("rgb set: hsb(%u,%u,%u) rejected", h, s, v);
         }
     }
 
     if (fields & RGB_SET_FIELD_EFFECT) {
-        if (zmk_rgb_underglow_select_effect(data[7]) == 0) {
+        if (rgb_behavior(RGB_EFS_CMD, data[7]) == 0) {
             cur_effect = data[7];
         } else {
             LOG_WRN("rgb set: effect %u out of range", data[7]);
@@ -129,11 +156,7 @@ static void handle_rgb_set(const uint8_t *data) {
     /* on/off last, so switching on reveals the colour/effect just applied
      * instead of one frame of the old state. */
     if (fields & RGB_SET_FIELD_ON) {
-        if (data[2]) {
-            zmk_rgb_underglow_on();
-        } else {
-            zmk_rgb_underglow_off();
-        }
+        rgb_behavior(data[2] ? RGB_ON_CMD : RGB_OFF_CMD, 0);
     }
 
     /* Receipt — also serves as the read path for an empty mask. */
