@@ -1,0 +1,14 @@
+description: |
+  HID Viz signal behavior. On key press it fires a generic, host-defined trigger
+  onto the raw HID bus, fire-and-forget (no ref, no reply). One parameter:
+    param1 = id (uint8), sent in byte[1]
+
+  The id is opaque on the wire — all meaning lives in the listening host's config
+  (see docs/signal-capability-spec.md). Because the id is a keymap binding
+  parameter it cannot be enumerated, so this form advertises the bare
+  `signal.fire` capability. Use zmk,behavior-hid-signal-fixed when you want each
+  id listed in the manifest.
+
+compatible: "zmk,behavior-hid-signal"
+
+include: one_param.yaml

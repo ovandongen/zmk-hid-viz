@@ -32,4 +32,11 @@ if(CONFIG_HID_VIZ)
         # Expose include/dt-bindings/hid_viz/emit.h to keymap preprocessing.
         zephyr_include_directories(include)
     endif()
+
+    if(CONFIG_HID_VIZ_SIGNAL)
+        target_sources(app PRIVATE src/signal_send.c)
+        target_sources(app PRIVATE src/behavior_hid_signal.c)
+        target_sources(app PRIVATE src/behavior_hid_signal_fixed.c)
+        # No include dir needed: ids are raw numbers / an `id` devicetree property.
+    endif()
 endif()

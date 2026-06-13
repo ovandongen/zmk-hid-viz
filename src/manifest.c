@@ -46,8 +46,11 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 /* Upper bound on distinct capability IDs for the dedup scratch list. Far above
  * any real device's capability count; if somehow exceeded, dedup simply stops
- * suppressing further duplicates (a cosmetic manifest repeat, never a crash). */
-#define MANIFEST_MAX_CAPS 32
+ * suppressing further duplicates (a cosmetic manifest repeat, never a crash).
+ * Sized with headroom for enumerated signal.fire/<id> entries (one slot per
+ * distinct id) on top of the fixed core/RGB/pointing caps. Just pointers — 64 *
+ * sizeof(char *) of stack scratch. */
+#define MANIFEST_MAX_CAPS 64
 
 /* Returns true if `id` was already seen in seen[0..*n); otherwise records it
  * (capacity permitting) and returns false. Compares by string value, since

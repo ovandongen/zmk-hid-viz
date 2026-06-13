@@ -66,6 +66,17 @@
 #define CMD_RGB_SET          0xD1   /* core.rgb.set     { on?, h?, s?, v?, effect? } */
 
 /* ============================================================
+ * Wire type bytes — signal.* namespace (CONFIG_HID_VIZ_SIGNAL)
+ *
+ * Opaque host-defined triggers: the keyboard fires an id, all meaning lives in
+ * the listening host's config. Per-id fixed nodes advertise as "signal.fire/<id>"
+ * so a host scan can enumerate exactly which ids the board fires; the flexible
+ * 1-cell &signal form advertises the bare "signal.fire". 0xC1/0xC2 are reserved
+ * for a future signal.value / signal.delta (analog / relative input).
+ * ============================================================ */
+#define SIGNAL_FIRE          0xC0   /* signal.fire { id:uint8 } — fire-and-forget */
+
+/* ============================================================
  * Wire type bytes — M1 additions
  * ============================================================ */
 #define CMD_GET_MANIFEST     0xF9   /* Request manifest stream */

@@ -67,6 +67,7 @@ All options in your `.conf` file:
 | `CONFIG_HID_VIZ_KEY_EVENTS` | y | Send key press/release events |
 | `CONFIG_HID_VIZ_COMMANDS` | y | Accept commands from host app |
 | `CONFIG_HID_VIZ_RGB` | n | RGB profile: handle `0xD1` set commands, emit `0xD0` change receipts (requires `CONFIG_ZMK_RGB_UNDERGLOW=y`) |
+| `CONFIG_HID_VIZ_SIGNAL` | n | Signal behaviors: fire opaque host-defined `0xC0` triggers on key press |
 | `CONFIG_HID_VIZ_CONFIG_ID` | "" | Layout/config identifier returned by the `0xFB` query |
 
 Raw HID transport options (`CONFIG_RAW_HID_USAGE_PAGE`, `CONFIG_RAW_HID_USAGE`, `CONFIG_RAW_HID_REPORT_SIZE`, `CONFIG_RAW_HID_DEVICE`) are owned by zmk-raw-hid — see its README for defaults and tuning.
@@ -228,6 +229,77 @@ wire bytes as the constants above; an unknown string fails the devicetree build)
 Both forms share `CONFIG_HID_VIZ_EMIT` and the same `[action, value_uint32_le]`
 wire message. Each fixed node also self-registers its action under `triggers` in
 the manifest automatically — declare the node and the device advertises it.
+
+## Signal behavior (generic host triggers)
+
+The optional `&signal` behavior fires an **opaque host-defined id** onto the bus on
+key press, fire-and-forget. Unlike emit (which references a *device* capability like
+DPI), a signal means nothing on the wire — it just says "id N happened." The
+listening host maps the id to whatever it likes (launch an app, run a script, focus
+a window). New actions are pure host config; no reflash. See
+[docs/signal-capability-spec.md](docs/signal-capability-spec.md) for the full design.
+
+Wire message (byte[0] = `0xC0`):
+| Byte | Value | Description |
+|------|-------|-------------|
+| 0 | `0xC0` | Message type (`signal.fire`) |
+| 1 | uint8 | Opaque id (meaning is host config) |
+
+Enable it in your `.conf`:
+
+```
+CONFIG_HID_VIZ_SIGNAL=y
+```
+
+**1-cell form** — flexible, one parameter is the id:
+
+```dts
+/ {
+    behaviors {
+        signal: signal {
+            compatible = "zmk,behavior-hid-signal";
+            #binding-cells = <1>;
+        };
+    };
+};
+```
+
+```dts
+&signal 7      // -> 0xC0, id 7   ("build")
+&signal 12     // -> 0xC0, id 12  ("open browser")
+```
+
+Put signal keys on a dedicated layer so they don't also type. The id here is a
+keymap parameter the firmware can't enumerate, so this form advertises only the
+bare `signal.fire` capability in the manifest ("I fire signals").
+
+**Fixed form (devicetree-configured, editor-friendly + enumerated)** — like the
+emit fixed form, the id lives on a zero-cell node, so it pastes into the **MoErgo
+Glove80 Layout Editor** and, additionally, each node self-registers an enumerated
+`signal.fire/<id>` entry in the manifest. A host scanning the keyboard then sees
+*exactly which ids it fires* — e.g. `signal.fire/7`, `signal.fire/12` — instead of
+an opaque "fires signals."
+
+```dts
+/ {
+    behaviors {
+        signal_7: signal_7 {
+            compatible = "zmk,behavior-hid-signal-fixed";
+            #binding-cells = <0>;
+            id = <7>;
+        };
+    };
+};
+```
+
+Then bind `&signal_7` on any key. Both forms share `CONFIG_HID_VIZ_SIGNAL` and the
+same `[0xC0, id]` wire message.
+
+**Security:** the host's id → action map is trusted, user-owned local config. The
+wire only ever *references* a slot the user already defined; it can never define
+one — so a keyboard can never inject an arbitrary command, only fire an id you
+already mapped. Treat any device that can write the raw-HID report as able to fire
+any configured id (fine for a local USB/BLE keyboard).
 
 ## Credits
 

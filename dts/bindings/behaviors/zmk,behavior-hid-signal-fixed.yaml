@@ -1,0 +1,23 @@
+description: |
+  HID Viz fixed (devicetree-configured) signal behavior. A zero-cell sibling of
+  zmk,behavior-hid-signal: the id is set as a devicetree property on the node
+  instead of as a keymap parameter, so the behavior can be placed and bound by
+  label (e.g. &signal_7) without a constant on the key. This is the form usable
+  from the MoErgo Glove80 Layout Editor's custom behaviors / custom devicetree
+  facility.
+
+    id = <7>;   // uint8, sent in byte[1]
+
+  On press it fires the same wire message as the 1-cell form, and each node also
+  self-registers an enumerated `signal.fire/<id>` capability in the manifest, so a
+  host scan sees exactly which ids the board fires.
+
+compatible: "zmk,behavior-hid-signal-fixed"
+
+include: zero_param.yaml
+
+properties:
+  id:
+    type: int
+    required: true
+    description: The opaque host-defined signal id (0-255), sent in byte[1].

@@ -57,6 +57,19 @@ config HID_VIZ_EMIT
       keyboards that originate actions (e.g. pointing/RGB) for another
       device to fulfill.
 
+config HID_VIZ_SIGNAL
+    bool "Signal behavior (generic host-defined triggers)"
+    default n
+    depends on HID_VIZ
+    help
+      Build the &signal keymap behaviors, which fire an opaque uint8 id onto
+      the raw HID bus on key press, fire-and-forget. The id carries no meaning
+      on the wire; the listening host maps id -> action (launch app, run
+      script, ...). Two forms (see README): the 1-cell &signal <id>, and a
+      zero-cell devicetree-configured form whose nodes are enumerated in the
+      manifest as `signal.fire/<id>` so a host can discover exactly which ids
+      the board fires. Requires a behavior node in your keymap. Off by default.
+
 config HID_VIZ_RGB
     bool "RGB profile (core.rgb.*)"
     default n
