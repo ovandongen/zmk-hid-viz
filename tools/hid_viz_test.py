@@ -9,6 +9,9 @@ dependency on the full host visualization app:
   * 0xF4  core.layer.setBase  -> resulting 0xFF layer-state notification
   * 0xF3  core.layer.activate -> 0xF7 confirm, then 0xFF
   * 0xF2  core.layer.deactivate -> 0xF7 confirm, then 0xFF
+  * 0xC0  signal.fire         -> received when a &signal / &signal_<id> key is pressed
+          (originated by the keyboard, fire-and-forget; the host only listens).
+          Run `--only signals` and press your signal keys.
 
 It finds the keyboard's raw-HID interface by the usage page / usage that
 zmk-raw-hid advertises (defaults 0xFF60 / 0x61), so you do NOT need to know the
@@ -56,6 +59,7 @@ CMD_LAYER_DEACTIVATE = 0xF2
 RSP_CONFIRM = 0xF7
 MSG_RGB_CHANGED = 0xD0
 CMD_RGB_SET = 0xD1
+SIGNAL_FIRE = 0xC0  # signal.fire { id:uint8 } — keyboard-originated, fire-and-forget
 
 # CMD_RGB_SET field-mask bits (byte[1]; field positions are fixed)
 RGB_FIELD_ON = 0x01      # byte[2]
@@ -228,6 +232,10 @@ def fmt_rgb_changed(r):
     )
 
 
+def fmt_signal(r):
+    return "0xC0 signal.fire     id=%d (emitted trigger)" % r[1]
+
+
 def fmt_other(r):
     return "0x%02X (%d bytes) %s" % (r[0], len(r), r[:8].hex(" "))
 
@@ -246,6 +254,8 @@ def print_reports(reports, label):
             print("     " + fmt_rgb_changed(r))
         elif t in EMIT_ACTION_NAMES:
             print("     " + fmt_emit(r))
+        elif t == SIGNAL_FIRE:
+            print("     " + fmt_signal(r))
         else:
             print("     " + fmt_other(r))
 
@@ -377,6 +387,35 @@ def test_rgb(dev):
             effect=orig["effect"], label="restore receipt")
 
 
+def test_signals(dev, seconds):
+    print("\n== Signals (0xC0 signal.fire) ==")
+    print("  Signals are keyboard-originated: press the keys bound to "
+          "&signal_1 / &signal_2 now.")
+    print("  Listening %ds..." % seconds)
+    seen = {}
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        try:
+            data = dev.read(REPORT_SIZE)
+        except OSError:
+            break
+        if not data:
+            time.sleep(0.02)
+            continue
+        r = bytes(data)
+        if r[0] == SIGNAL_FIRE:
+            seen[r[1]] = seen.get(r[1], 0) + 1
+            print("     " + fmt_signal(r))
+        else:
+            print_reports([r], "other")
+    if seen:
+        summary = ", ".join("id=%d x%d" % (k, v) for k, v in sorted(seen.items()))
+        print("  fired ids: %s" % summary)
+    else:
+        print("  !! no 0xC0 signal.fire reports seen — check CONFIG_HID_VIZ_SIGNAL=y, "
+              "the &signal_<id> keymap binding, and that you pressed the signal keys")
+
+
 def listen(dev, seconds):
     print("\n== Listening for %ds (press keys / change layers) ==" % seconds)
     deadline = time.time() + seconds
@@ -409,9 +448,13 @@ def main():
                     help="layer index for activate/deactivate")
     ap.add_argument("--listen", type=int, metavar="SECONDS",
                     help="passively print notifications for N seconds, then exit")
-    ap.add_argument("--only", choices=["manifest", "setbase", "activate", "deactivate", "rgb"],
+    ap.add_argument("--only",
+                    choices=["manifest", "setbase", "activate", "deactivate", "rgb", "signals"],
                     help="run a single test instead of the full sequence "
-                         "(rgb is never part of the full sequence — run it explicitly)")
+                         "(rgb and signals are never part of the full sequence — "
+                         "run them explicitly)")
+    ap.add_argument("--signal-seconds", type=int, default=15,
+                    help="how long `--only signals` listens for key-pressed signals")
     args = ap.parse_args()
 
     if args.list_all:
@@ -438,6 +481,8 @@ def main():
             test_deactivate(dev, 2, args.act_layer)
         elif args.only == "rgb":
             test_rgb(dev)
+        elif args.only == "signals":
+            test_signals(dev, args.signal_seconds)
         else:
             test_manifest(dev)
             test_setbase(dev, args.layer)
