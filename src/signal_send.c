@@ -1,6 +1,7 @@
 #include "signal_send.h"
 
 #include "capabilities.h"
+#include "hid_viz_send.h"
 
 #include <raw_hid/events.h>
 
@@ -26,6 +27,5 @@ void hid_viz_send_signal(uint8_t id) {
 
     LOG_INF("hid_viz_signal: id=%u", id);
 
-    raise_raw_hid_sent_event(
-        (struct raw_hid_sent_event){.data = signal_buf, .length = sizeof(signal_buf)});
+    hid_viz_send(signal_buf, sizeof(signal_buf));
 }

@@ -11,6 +11,7 @@
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include "capabilities.h"
+#include "hid_viz_send.h"
 
 /*
  * Layer action commands (M1 additions). A second listener on
@@ -52,8 +53,7 @@ static void send_confirm(uint16_t ref, uint8_t ok) {
     confirm_buf[2] = (uint8_t)((ref >> 8) & 0xFF);
     confirm_buf[3] = ok;
 
-    raise_raw_hid_sent_event(
-        (struct raw_hid_sent_event){.data = confirm_buf, .length = sizeof(confirm_buf)});
+    hid_viz_send(confirm_buf, sizeof(confirm_buf));
 }
 
 static void handle_set_base(uint8_t layer) {

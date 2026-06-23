@@ -11,8 +11,8 @@
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include "capabilities.h"
+#include "hid_viz_send.h"
 
-extern volatile bool hid_viz_suppress_notifications;
 extern void send_layer_state(void);
 
 /* Manifest self-registration. The local #defines below mirror capabilities.h's
@@ -59,8 +59,7 @@ static void send_device_info(void) {
     }
     memcpy(&response_buf[2], board_id, id_len);
 
-    raise_raw_hid_sent_event(
-        (struct raw_hid_sent_event){.data = response_buf, .length = sizeof(response_buf)});
+    hid_viz_send(response_buf, sizeof(response_buf));
 }
 
 static void send_config_id(void) {
@@ -74,8 +73,7 @@ static void send_config_id(void) {
     }
     memcpy(&response_buf[1], config_id, id_len);
 
-    raise_raw_hid_sent_event(
-        (struct raw_hid_sent_event){.data = response_buf, .length = sizeof(response_buf)});
+    hid_viz_send(response_buf, sizeof(response_buf));
 }
 
 static void handle_set_layer_state(uint32_t layer_state) {

@@ -14,6 +14,7 @@
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include "capabilities.h"
+#include "hid_viz_send.h"
 
 /*
  * RGB profile (M5): `core.rgb.*` mapped onto stock ZMK underglow. Global
@@ -102,8 +103,7 @@ static void send_rgb_changed(void) {
     rgb_buf[5] = cur_v;
     rgb_buf[6] = cur_effect;
 
-    raise_raw_hid_sent_event(
-        (struct raw_hid_sent_event){.data = rgb_buf, .length = sizeof(rgb_buf)});
+    hid_viz_send(rgb_buf, sizeof(rgb_buf));
 }
 
 /* Invoke the rgb_ug behavior (press only — its release handler is a no-op).

@@ -1,5 +1,7 @@
 #include "emit_send.h"
 
+#include "hid_viz_send.h"
+
 #include <raw_hid/events.h>
 
 #include <string.h>
@@ -27,6 +29,5 @@ void hid_viz_emit_send(uint8_t action, uint32_t value) {
 
     LOG_INF("hid_viz_emit: action=0x%02x value=%u", action, value);
 
-    raise_raw_hid_sent_event(
-        (struct raw_hid_sent_event){.data = emit_buf, .length = sizeof(emit_buf)});
+    hid_viz_send(emit_buf, sizeof(emit_buf));
 }

@@ -4,12 +4,15 @@
 
 #include <string.h>
 #include <stdint.h>
+#include <zephyr/init.h>
+#include <zephyr/kernel.h>
 #include <zephyr/sys/util.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include "capabilities.h"
+#include "hid_viz_send.h"
 
 /*
  * Manifest handler: responds to CMD_GET_MANIFEST (0xF9) with a stream of
@@ -113,8 +116,7 @@ static void send_manifest_entry(uint8_t seq_idx, bool is_last,
         /* On the final chunk the byte after the data is already 0 (null
          * terminator) from the memset above. */
 
-        raise_raw_hid_sent_event(
-            (struct raw_hid_sent_event){.data = manifest_buf, .length = sizeof(manifest_buf)});
+        hid_viz_send(manifest_buf, sizeof(manifest_buf));
 
         offset    += chunk;
         remaining -= chunk;
@@ -122,20 +124,18 @@ static void send_manifest_entry(uint8_t seq_idx, bool is_last,
     } while (remaining > 0);
 }
 
-static int manifest_command_handler(const zmk_event_t *eh)
+/*
+ * Stream the manifest as a sequence of 0xF8 reports, starting at logical entry
+ * `start_idx`. Runs ONLY on the dedicated worker thread below — never inline on
+ * the inbound-report dispatch. Each report blocks up to ~30ms in the USB
+ * transport waiting for the host to drain the previous IN report, so the whole
+ * ~20-entry stream takes ~580ms; doing that on the USB SetReport callback
+ * context (where raw_hid_received_event is raised) blocked the nRF52840 USB
+ * peripheral long enough to crash it. On its own preemptible thread the blocking
+ * is harmless — the USB/system contexts stay responsive and the watchdog is fed.
+ */
+static void manifest_stream(uint8_t start_idx)
 {
-    struct raw_hid_received_event *event = as_raw_hid_received_event(eh);
-    if (event == NULL || event->length == 0) {
-        return ZMK_EV_EVENT_BUBBLE;
-    }
-    if (event->data[0] != CMD_GET_MANIFEST) {
-        return ZMK_EV_EVENT_BUBBLE;
-    }
-
-    /* Optional resumption: byte[1] = first logical entry to (re)send. */
-    uint8_t start_idx = (event->length >= 2) ? event->data[1] : 0;
-    LOG_INF("Command: get manifest (start=%u)", start_idx);
-
     /* Compose the ordered logical sequence:
      *   0:      identity — board name (always present)
      *   1:      identity — config ID  (only if non-empty)
@@ -179,6 +179,81 @@ static int manifest_command_handler(const zmk_event_t *eh)
         }
         seq++;
     }
+
+}
+
+/*
+ * Dedicated manifest-streaming thread.
+ *
+ * manifest_command_handler() (the raw_hid_received_event listener) must return
+ * promptly: on USB it runs in the transport's SetReport callback context, and
+ * blocking it for the length of the stream crashes the USB peripheral. So the
+ * handler only records the requested start index and signals this worker, which
+ * does the slow, blocking send loop off that context.
+ *
+ * The worker streams through hid_viz_send(), whose mutex serializes it against
+ * the notifier and command handlers, so a concurrent inbound command (e.g. a
+ * 0xFC layer set arriving mid-stream) can never be inside the transport's
+ * send_report() at the same time — it waits at most one report.
+ */
+#define MANIFEST_THREAD_STACK_SIZE 2048
+
+static K_THREAD_STACK_DEFINE(manifest_thread_stack, MANIFEST_THREAD_STACK_SIZE);
+static struct k_thread manifest_thread_data;
+static K_SEM_DEFINE(manifest_sem, 0, 1);
+
+/* Written by the listener context, read by the worker. Single byte, so the
+ * read/write is atomic on the target; volatile keeps both sides honest. */
+static volatile uint8_t manifest_start_idx;
+
+static void manifest_thread_fn(void *p1, void *p2, void *p3)
+{
+    ARG_UNUSED(p1);
+    ARG_UNUSED(p2);
+    ARG_UNUSED(p3);
+
+    while (1) {
+        k_sem_take(&manifest_sem, K_FOREVER);
+        uint8_t start_idx = manifest_start_idx;
+        LOG_INF("Streaming manifest (start=%u)", start_idx);
+
+        /* Mute spontaneous layer-state notifications for the duration so they
+         * don't pad the stream; key events (0xF1) still flow but the host
+         * ignores non-0xF8 reports while reading the manifest. */
+        hid_viz_suppress_notifications = true;
+        manifest_stream(start_idx);
+        hid_viz_suppress_notifications = false;
+    }
+}
+
+static int manifest_thread_init(void)
+{
+    k_thread_create(&manifest_thread_data, manifest_thread_stack,
+                    K_THREAD_STACK_SIZEOF(manifest_thread_stack),
+                    manifest_thread_fn, NULL, NULL, NULL,
+                    K_LOWEST_APPLICATION_THREAD_PRIO, 0, K_NO_WAIT);
+    k_thread_name_set(&manifest_thread_data, "hid_viz_manifest");
+    return 0;
+}
+
+SYS_INIT(manifest_thread_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+
+static int manifest_command_handler(const zmk_event_t *eh)
+{
+    struct raw_hid_received_event *event = as_raw_hid_received_event(eh);
+    if (event == NULL || event->length == 0) {
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+    if (event->data[0] != CMD_GET_MANIFEST) {
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+
+    /* Optional resumption: byte[1] = first logical entry to (re)send. Copy the
+     * scalar out now — `event` is freed once this returns — then hand off to the
+     * worker and return immediately so we don't block the dispatch context. */
+    manifest_start_idx = (event->length >= 2) ? event->data[1] : 0;
+    LOG_INF("Command: get manifest (start=%u) -> worker", manifest_start_idx);
+    k_sem_give(&manifest_sem);
 
     return ZMK_EV_EVENT_BUBBLE;
 }

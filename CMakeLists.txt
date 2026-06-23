@@ -8,6 +8,11 @@ if(CONFIG_HID_VIZ)
     # empty); manifest.c walks it. See src/hid_viz_cap.ld.
     zephyr_linker_sources(SECTIONS src/hid_viz_cap.ld)
 
+    # Serialized transmit funnel — every sender below routes through hid_viz_send()
+    # so the manifest worker thread and the inbound command handlers can't both be
+    # inside the (non-thread-safe) transport send_report() at once.
+    target_sources(app PRIVATE src/hid_viz_send.c)
+
     if(CONFIG_HID_VIZ_LAYER_EVENTS OR CONFIG_HID_VIZ_KEY_EVENTS)
         target_sources(app PRIVATE src/notifier.c)
     endif()

@@ -13,6 +13,7 @@
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include "capabilities.h"
+#include "hid_viz_send.h"
 
 /*
  * Outbound notifications: subscribes to ZMK core events and sends
@@ -38,7 +39,8 @@ HID_VIZ_CAP_REGISTER(cap_core_keyboard_key_event, MSG_KEY_EVENT, ROLE_NOTIFIES, 
                      "core.keyboard.key.event");
 #endif
 
-volatile bool hid_viz_suppress_notifications = false;
+/* hid_viz_suppress_notifications is defined in hid_viz_send.c (always compiled)
+ * and declared in hid_viz_send.h. */
 static uint8_t layer_buf[CONFIG_RAW_HID_REPORT_SIZE];
 static uint8_t key_buf[CONFIG_RAW_HID_REPORT_SIZE];
 
@@ -58,8 +60,7 @@ void send_layer_state(void) {
     memcpy(&layer_buf[2], &default_layer_state, sizeof(uint32_t));
     memcpy(&layer_buf[2 + sizeof(uint32_t)], &layer_state, sizeof(uint32_t));
 
-    raise_raw_hid_sent_event(
-        (struct raw_hid_sent_event){.data = layer_buf, .length = sizeof(layer_buf)});
+    hid_viz_send(layer_buf, sizeof(layer_buf));
 }
 
 static void send_key_event(uint32_t position, bool pressed) {
@@ -74,8 +75,7 @@ static void send_key_event(uint32_t position, bool pressed) {
     key_buf[2] = (uint8_t)position;
     key_buf[3] = pressed ? 1 : 0;
 
-    raise_raw_hid_sent_event(
-        (struct raw_hid_sent_event){.data = key_buf, .length = sizeof(key_buf)});
+    hid_viz_send(key_buf, sizeof(key_buf));
 }
 
 static int layer_state_changed_listener(const zmk_event_t *eh) {
