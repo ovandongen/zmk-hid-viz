@@ -118,6 +118,24 @@ static void send_manifest_entry(uint8_t seq_idx, bool is_last,
 
         hid_viz_send(manifest_buf, sizeof(manifest_buf));
 
+        /*
+         * WORKAROUND for an upstream zmk-raw-hid USB bug (not ours): its
+         * usb_hid.c send_report() copies the report into a *stack-local*
+         * buffer and hands it to the asynchronous hid_int_ep_write() — the
+         * nRF52840 EasyDMA keeps reading that buffer after send_report()
+         * returns. Streaming reports back-to-back, our next worker frames
+         * overwrite that popped stack region before the DMA drains, so the
+         * tail (bytes 24..31) of each report arrived as garbage and every
+         * capability id longer than 18 chars came through corrupted. (BLE is
+         * unaffected — hog.c copies into a net_buf synchronously.)
+         *
+         * Yielding here keeps THIS worker's stack frozen until the host drains
+         * the IN report, so the DMA reads the buffer intact. The real fix is a
+         * `static` report buffer in zmk-raw-hid; bump this if any tail garbage
+         * reappears on a slower-polling host.
+         */
+        k_msleep(5);
+
         offset    += chunk;
         remaining -= chunk;
         first      = false;
@@ -196,18 +214,7 @@ static void manifest_stream(uint8_t start_idx)
  * 0xFC layer set arriving mid-stream) can never be inside the transport's
  * send_report() at the same time — it waits at most one report.
  */
-/*
- * Stack must hold the FULL synchronous USB transmit call chain, because ZMK
- * event raises dispatch in the caller's context: hid_viz_send() -> raise ->
- * transport send_report() -> hid_int_ep_write() -> nrfx USBD all run on THIS
- * worker's stack (over BLE the deep work is deferred off-caller by
- * bt_gatt_notify, so BLE never needed the headroom). On top of that the
- * streamer burns ~512 bytes on its seen[MANIFEST_MAX_CAPS] dedup scratch.
- * 2048 overflowed and silently corrupted the tail (bytes 24..31) of each
- * outgoing manifest report with stale stack frames, breaking every capability
- * id longer than 18 chars. 4096 gives the USB driver chain comfortable room.
- */
-#define MANIFEST_THREAD_STACK_SIZE 4096
+#define MANIFEST_THREAD_STACK_SIZE 2048
 
 static K_THREAD_STACK_DEFINE(manifest_thread_stack, MANIFEST_THREAD_STACK_SIZE);
 static struct k_thread manifest_thread_data;
