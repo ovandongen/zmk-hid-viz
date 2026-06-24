@@ -1,4 +1,4 @@
-#include <raw_hid/events.h>
+#include "command_dispatch.h"
 
 #include <zmk/event_manager.h>
 #include <zmk/keymap.h>
@@ -15,7 +15,8 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 /*
  * Layer action commands (M1 additions). A second listener on
- * raw_hid_received_event, alongside the existing command_handler.c; ZMK allows
+ * raw_hid_command_event (the dispatcher's off-callback re-raise; see
+ * command_dispatch.h), alongside the existing command_handler.c; ZMK allows
  * multiple listeners per event and each one bubbles, so the two never conflict
  * (their command bytes are disjoint).
  *
@@ -78,7 +79,7 @@ static void handle_deactivate(uint16_t ref, uint8_t layer) {
 }
 
 static int layer_actions_handler(const zmk_event_t *eh) {
-    struct raw_hid_received_event *event = as_raw_hid_received_event(eh);
+    struct raw_hid_command_event *event = as_raw_hid_command_event(eh);
     if (event == NULL || event->length == 0) {
         return ZMK_EV_EVENT_BUBBLE;
     }
@@ -112,4 +113,4 @@ static int layer_actions_handler(const zmk_event_t *eh) {
 }
 
 ZMK_LISTENER(hid_viz_layer_actions, layer_actions_handler);
-ZMK_SUBSCRIPTION(hid_viz_layer_actions, raw_hid_received_event);
+ZMK_SUBSCRIPTION(hid_viz_layer_actions, raw_hid_command_event);

@@ -7,9 +7,11 @@
 #include <zephyr/kernel.h>
 
 /* Serializes the raise -> transport send_report leg across all senders (the
- * manifest worker thread, the command/layer/rgb handlers running on the inbound
- * dispatch context, and the notifier on ZMK core-event contexts). See
- * hid_viz_send.h for why this is required. */
+ * manifest worker thread, the command/layer/rgb handlers running on the shared
+ * dispatch worker thread, and the notifier/emit/signal paths on ZMK
+ * behavior/core-event contexts). These run on independent threads and can call
+ * concurrently, so the mutex keeps two of them from being inside the
+ * non-thread-safe send_report() at once. See hid_viz_send.h. */
 K_MUTEX_DEFINE(hid_viz_tx_mutex);
 
 /* Gate for spontaneous layer-state notifications (see hid_viz_send.h). Lives

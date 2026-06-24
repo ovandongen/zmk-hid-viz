@@ -1,4 +1,4 @@
-#include <raw_hid/events.h>
+#include "command_dispatch.h"
 
 #include <zmk/event_manager.h>
 #include <zmk/rgb_underglow.h>
@@ -164,7 +164,7 @@ static void handle_rgb_set(const uint8_t *data) {
 }
 
 static int rgb_actions_handler(const zmk_event_t *eh) {
-    struct raw_hid_received_event *event = as_raw_hid_received_event(eh);
+    struct raw_hid_command_event *event = as_raw_hid_command_event(eh);
     if (event == NULL || event->length == 0) {
         return ZMK_EV_EVENT_BUBBLE;
     }
@@ -177,4 +177,4 @@ static int rgb_actions_handler(const zmk_event_t *eh) {
 }
 
 ZMK_LISTENER(hid_viz_rgb_actions, rgb_actions_handler);
-ZMK_SUBSCRIPTION(hid_viz_rgb_actions, raw_hid_received_event);
+ZMK_SUBSCRIPTION(hid_viz_rgb_actions, raw_hid_command_event);

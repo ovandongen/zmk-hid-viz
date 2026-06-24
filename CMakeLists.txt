@@ -13,6 +13,13 @@ if(CONFIG_HID_VIZ)
     # inside the (non-thread-safe) transport send_report() at once.
     target_sources(app PRIVATE src/hid_viz_send.c)
 
+    # Shared inbound-command dispatcher — the single listener on
+    # raw_hid_received_event. It defers every command onto a worker thread (via
+    # raw_hid_command_event) so no handler runs on the USB SetReport callback
+    # context. Always compiled: it is the one entry point all command handlers
+    # below depend on. See src/command_dispatch.h.
+    target_sources(app PRIVATE src/command_dispatch.c)
+
     if(CONFIG_HID_VIZ_LAYER_EVENTS OR CONFIG_HID_VIZ_KEY_EVENTS)
         target_sources(app PRIVATE src/notifier.c)
     endif()

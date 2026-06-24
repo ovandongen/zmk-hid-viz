@@ -1,4 +1,4 @@
-#include <raw_hid/events.h>
+#include "command_dispatch.h"
 
 #include <zmk/event_manager.h>
 #include <zmk/keymap.h>
@@ -82,9 +82,11 @@ static void handle_set_layer_state(uint32_t layer_state) {
     /* Suppress intermediate layer-state notifications during the
      * deactivate/activate cycle. Without this, each zmk_keymap_layer_deactivate
      * triggers a zmk_layer_state_changed event, which the notifier sends as
-     * an IN report. On USB, this intermediate report (typically 0x01 = just
-     * layer 0) races with the host's outbound SetReport and can crash the
-     * nRF52840's USB peripheral. */
+     * an IN report — flooding the host with intermediate states (typically
+     * 0x01 = just layer 0) before the one clean final state below. (The handler
+     * itself now runs off the USB SetReport callback on the dispatch worker, so
+     * these sends no longer threaten the USB peripheral; suppression is purely
+     * to avoid the intermediate-report flood.) */
     hid_viz_suppress_notifications = true;
 
     for (uint8_t i = 1; i < 32; i++) {
@@ -105,7 +107,7 @@ static void handle_set_layer_state(uint32_t layer_state) {
 }
 
 static int command_handler(const zmk_event_t *eh) {
-    struct raw_hid_received_event *event = as_raw_hid_received_event(eh);
+    struct raw_hid_command_event *event = as_raw_hid_command_event(eh);
     if (event == NULL || event->length == 0) {
         return ZMK_EV_EVENT_BUBBLE;
     }
@@ -141,4 +143,4 @@ static int command_handler(const zmk_event_t *eh) {
 }
 
 ZMK_LISTENER(hid_viz_command_handler, command_handler);
-ZMK_SUBSCRIPTION(hid_viz_command_handler, raw_hid_received_event);
+ZMK_SUBSCRIPTION(hid_viz_command_handler, raw_hid_command_event);
