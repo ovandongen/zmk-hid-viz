@@ -118,24 +118,6 @@ static void send_manifest_entry(uint8_t seq_idx, bool is_last,
 
         hid_viz_send(manifest_buf, sizeof(manifest_buf));
 
-        /*
-         * WORKAROUND for an upstream zmk-raw-hid USB bug (not ours): its
-         * usb_hid.c send_report() copies the report into a *stack-local*
-         * buffer and hands it to the asynchronous hid_int_ep_write() — the
-         * nRF52840 EasyDMA keeps reading that buffer after send_report()
-         * returns. Streaming reports back-to-back, our next worker frames
-         * overwrite that popped stack region before the DMA drains, so the
-         * tail (bytes 24..31) of each report arrived as garbage and every
-         * capability id longer than 18 chars came through corrupted. (BLE is
-         * unaffected — hog.c copies into a net_buf synchronously.)
-         *
-         * Yielding here keeps THIS worker's stack frozen until the host drains
-         * the IN report, so the DMA reads the buffer intact. The real fix is a
-         * `static` report buffer in zmk-raw-hid; bump this if any tail garbage
-         * reappears on a slower-polling host.
-         */
-        k_msleep(5);
-
         offset    += chunk;
         remaining -= chunk;
         first      = false;
