@@ -83,6 +83,22 @@ config HID_VIZ_RGB
       from layer state, so hosts change that picture via core.layer.*
       instead. Enable on boards with RGB underglow.
 
+config HID_VIZ_SYSTEM
+    bool "System commands: bootloader / reset from the host (core.system.*)"
+    default n
+    depends on HID_VIZ
+    depends on ZMK_USB
+    help
+      Handle core.system.bootloader (0xB0) and core.system.reset (0xB1):
+      the host can reboot this half, or a split peripheral over ZMK's own
+      split link, into its UF2 bootloader or a plain reset, so a flashing
+      tool needs no bootloader key press. The peripheral needs no module.
+      Each command carries a magic + CRC so a stray report can't trigger
+      it, and it is refused unless USB HID is active on this half.
+      Off by default: it lets any program on the connected computer that
+      can write the raw-HID report reboot the keyboard into a writable
+      state. Enable it only when you want host-driven flashing.
+
 config HID_VIZ_CONFIG_ID
     string "Layout/config identifier"
     default ""

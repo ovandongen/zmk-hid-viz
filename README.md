@@ -1,6 +1,6 @@
 # zmk-hid-viz
 
-A ZMK firmware module that sends real-time layer-state and key-event notifications to a host visualization app, and accepts commands from the host. Runs on top of the [zmk-raw-hid](https://github.com/zzeneg/zmk-raw-hid) transport module.
+A ZMK firmware module that sends real-time layer-state and key-event notifications to a host visualization app, and accepts commands from the host. Runs on top of the [zmk-raw-hid](https://github.com/ovandongen/zmk-raw-hid) transport module (the `ovandongen` fork; zzeneg's upstream `main` has carried the same static-buffer fix since August 2026, so either works).
 
 ## What it does
 
@@ -19,8 +19,6 @@ manifest:
   remotes:
     - name: zmkfirmware
       url-base: https://github.com/zmkfirmware
-    - name: zzeneg
-      url-base: https://github.com/zzeneg
     - name: ovandongen
       url-base: https://github.com/ovandongen
   projects:
@@ -29,7 +27,7 @@ manifest:
       revision: main
       import: app/west.yml
     - name: zmk-raw-hid
-      remote: zzeneg
+      remote: ovandongen
       revision: main
     - name: zmk-hid-viz
       remote: ovandongen
@@ -68,6 +66,7 @@ All options in your `.conf` file:
 | `CONFIG_HID_VIZ_COMMANDS` | y | Accept commands from host app |
 | `CONFIG_HID_VIZ_RGB` | n | RGB profile: handle `0xD1` set commands, emit `0xD0` change receipts (requires `CONFIG_ZMK_RGB_UNDERGLOW=y`) |
 | `CONFIG_HID_VIZ_SIGNAL` | n | Signal behaviors: fire opaque host-defined `0xC0` triggers on key press |
+| `CONFIG_HID_VIZ_SYSTEM` | n | System commands: reboot a half into its bootloader (`0xB0`) or reset it (`0xB1`) from the host. Off by default — see *System commands* below |
 | `CONFIG_HID_VIZ_CONFIG_ID` | "" | Layout/config identifier returned by the `0xFB` query |
 
 Raw HID transport options (`CONFIG_RAW_HID_USAGE_PAGE`, `CONFIG_RAW_HID_USAGE`, `CONFIG_RAW_HID_REPORT_SIZE`, `CONFIG_RAW_HID_DEVICE`) are owned by zmk-raw-hid — see its README for defaults and tuning.
@@ -156,6 +155,43 @@ as a state query. Per-key colour is deliberately not exposed: on ZMK the
 per-key picture derives locally from layer state, so hosts change it with the
 layer commands above (`0xD2` / `core.rgb.setKey` is reserved for QMK RGB
 Matrix devices).
+
+**System: bootloader / reset** (byte[0] = `0xB0` / `0xB1`, requires `CONFIG_HID_VIZ_SYSTEM`):
+| Byte | Value | Description |
+|------|-------|-------------|
+| 0 | `0xB0` / `0xB1` | `core.system.bootloader` / `core.system.reset` |
+| 1-2 | uint16 (LE) | `ref`, echoed in the `0xF7` confirm |
+| 3 | uint8 | Target: `0xFF` = the central (this half), `0..n-1` = peripheral slot |
+| 4-9 | ASCII | Magic: `HVBOOT` for `0xB0`, `HVRSET` for `0xB1` |
+| 10 | uint8 | CRC-8 (poly `0x07`, init `0x00`, i.e. CRC-8/SMBUS) over bytes 0-9 |
+| 11+ | `0x00` | Must be zero |
+
+Example, bootloader on the central with `ref = 0x0B0B`:
+`B0 0B 0B FF 48 56 42 4F 4F 54 53` followed by zeros.
+
+The keyboard replies `0xF7 { ref, ok }`:
+- **Central** (`0xFF`): `ok = 1`, then it reboots about 100 ms later so the reply gets out first.
+- **Peripheral slot**: the command is relayed over ZMK's own split link, so the
+  peripheral needs no module. `ok = 1` means *queued on the split link*: ZMK can't
+  report delivery, so treat the bootloader drive appearing as the real success.
+  On a normal split the other half is slot 0. With a dongle both halves are
+  peripherals, numbered in pairing order (not left/right).
+- `ok = 0`: the slot doesn't exist, or USB HID isn't active on the central.
+
+A report that fails the length, magic, CRC or zero-padding check is **ignored with
+no reply**: it is most likely not meant for this keyboard. The check guards
+against accidents (other programs probing HID devices, corrupted reports), not
+attackers, since the magic is public. Commands are refused unless USB HID is
+active on the central, because zmk-raw-hid delivers BLE writes the same way.
+
+**Security:** with this enabled, any program on a connected computer that can
+write the raw-HID report can put the keyboard into its bootloader, a state
+where new firmware can be written. That's why it is off by default. Enable it
+only on boards you want to flash from a host tool.
+
+The manifest lists these as `core.system.bootloader/<n>` and
+`core.system.reset/<n>`, where `<n>` is the number of peripheral slots
+(`0` on a non-split board).
 
 ## Emit behavior (originator)
 
@@ -303,5 +339,5 @@ any configured id (fine for a local USB/BLE keyboard).
 
 ## Credits
 
-Raw HID transport: [zmk-raw-hid](https://github.com/zzeneg/zmk-raw-hid) by zzeneg.
+Raw HID transport: [zmk-raw-hid](https://github.com/zzeneg/zmk-raw-hid) by zzeneg (used here via the [ovandongen fork](https://github.com/ovandongen/zmk-raw-hid)).
 Notification approach inspired by [zmk-keypeek-layer-notifier](https://github.com/srwi/zmk-keypeek-layer-notifier) by srwi.

@@ -77,6 +77,16 @@
 #define SIGNAL_FIRE          0xC0   /* signal.fire { id:uint8 } — fire-and-forget */
 
 /* ============================================================
+ * Wire type bytes — core.system.* (CONFIG_HID_VIZ_SYSTEM, opt-in)
+ *
+ * Reboot a half into its UF2 bootloader, or plain-reset it. Both carry a
+ * per-command magic + CRC-8 so a stray report can't reboot the board; layout
+ * in src/system_actions.c and the README. Confirmed with 0xF7.
+ * ============================================================ */
+#define CMD_SYSTEM_BOOTLOADER 0xB0  /* core.system.bootloader { ref[2], target, magic[6], crc } */
+#define CMD_SYSTEM_RESET      0xB1  /* core.system.reset      { ref[2], target, magic[6], crc } */
+
+/* ============================================================
  * Wire type bytes — M1 additions
  * ============================================================ */
 #define CMD_GET_MANIFEST     0xF9   /* Request manifest stream */

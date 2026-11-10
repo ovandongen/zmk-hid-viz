@@ -12,6 +12,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include "capabilities.h"
 #include "hid_viz_send.h"
+#include "zmk_compat.h"
 
 extern void send_layer_state(void);
 
@@ -91,13 +92,13 @@ static void handle_set_layer_state(uint32_t layer_state) {
 
     for (uint8_t i = 1; i < 32; i++) {
         if (zmk_keymap_layer_active(i)) {
-            zmk_keymap_layer_deactivate(i);
+            HID_VIZ_LAYER_DEACTIVATE(i);
         }
     }
 
     for (uint8_t i = 1; i < 32; i++) {
         if (layer_state & BIT(i)) {
-            zmk_keymap_layer_activate(i);
+            HID_VIZ_LAYER_ACTIVATE(i);
         }
     }
 

@@ -60,6 +60,10 @@ RSP_CONFIRM = 0xF7
 MSG_RGB_CHANGED = 0xD0
 CMD_RGB_SET = 0xD1
 SIGNAL_FIRE = 0xC0  # signal.fire { id:uint8 } — keyboard-originated, fire-and-forget
+CMD_SYSTEM_BOOTLOADER = 0xB0  # core.system.bootloader { ref[2], target, magic[6], crc }
+CMD_SYSTEM_RESET = 0xB1       # core.system.reset      { ref[2], target, magic[6], crc }
+SYSTEM_MAGIC = {CMD_SYSTEM_BOOTLOADER: b"HVBOOT", CMD_SYSTEM_RESET: b"HVRSET"}
+SYSTEM_TARGET_CENTRAL = 0xFF
 
 # CMD_RGB_SET field-mask bits (byte[1]; field positions are fixed)
 RGB_FIELD_ON = 0x01      # byte[2]
@@ -416,6 +420,68 @@ def test_signals(dev, seconds):
               "the &signal_<id> keymap binding, and that you pressed the signal keys")
 
 
+def crc8(data):
+    """CRC-8 poly 0x07, init 0x00 (CRC-8/SMBUS) — mirrors sys_crc8() in system_actions.c."""
+    crc = 0
+    for b in data:
+        crc ^= b
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x07) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+    return crc
+
+
+def system_packet(cmd, ref, target, corrupt=False):
+    body = bytes([cmd, ref & 0xFF, (ref >> 8) & 0xFF, target & 0xFF]) + SYSTEM_MAGIC[cmd]
+    crc = crc8(body)
+    if corrupt:
+        crc ^= 0x5A
+    return list(body + bytes([crc]))
+
+
+def test_system_guard(dev):
+    """Send packets that must be IGNORED (no reply, no reboot)."""
+    print("\n== core.system guard: malformed packets must be ignored ==")
+    bad = {
+        "bad CRC": system_packet(CMD_SYSTEM_BOOTLOADER, 11, SYSTEM_TARGET_CENTRAL, corrupt=True),
+        "reset magic on 0xB0": [CMD_SYSTEM_BOOTLOADER] + system_packet(CMD_SYSTEM_RESET, 12, SYSTEM_TARGET_CENTRAL)[1:],
+        "bare opcode": [CMD_SYSTEM_BOOTLOADER],
+        "non-zero padding": system_packet(CMD_SYSTEM_BOOTLOADER, 13, SYSTEM_TARGET_CENTRAL) + [0, 0, 1],
+    }
+    ok = True
+    for label, pkt in bad.items():
+        send(dev, pkt)
+        reports = drain(dev)
+        confirms = [r for r in reports if r[0] == RSP_CONFIRM]
+        if confirms:
+            ok = False
+            print("  !! %-22s got a reply: %s" % (label, fmt_confirm(confirms[0])))
+        else:
+            print("  ok %-22s ignored" % label)
+    print("  guard %s" % ("PASSED (board still here, no replies)" if ok else "FAILED"))
+
+
+def test_system(dev, cmd, target, ref=0x0B0B):
+    name = "bootloader" if cmd == CMD_SYSTEM_BOOTLOADER else "reset"
+    who = "central (this half)" if target == SYSTEM_TARGET_CENTRAL else "peripheral slot %d" % target
+    print("\n== core.system.%s (0x%02X) -> %s ==" % (name, cmd, who))
+    send(dev, system_packet(cmd, ref, target))
+    reports = drain(dev)
+    print_reports(reports, "after %s" % name)
+    confirms = [r for r in reports if r[0] == RSP_CONFIRM]
+    if not confirms:
+        print("  !! no 0xF7 confirm (is CONFIG_HID_VIZ_SYSTEM=y flashed on the central?)")
+        return
+    r = confirms[0]
+    if r[3] == 1:
+        if cmd == CMD_SYSTEM_BOOTLOADER:
+            print("  accepted — that half should now show up as a USB drive "
+                  "(a peripheral needs its own USB cable for that).")
+        else:
+            print("  accepted — that half should restart now.")
+    else:
+        print("  refused (ok=0): slot doesn't exist, or USB HID isn't active on the central.")
+
+
 def listen(dev, seconds):
     print("\n== Listening for %ds (press keys / change layers) ==" % seconds)
     deadline = time.time() + seconds
@@ -449,10 +515,14 @@ def main():
     ap.add_argument("--listen", type=int, metavar="SECONDS",
                     help="passively print notifications for N seconds, then exit")
     ap.add_argument("--only",
-                    choices=["manifest", "setbase", "activate", "deactivate", "rgb", "signals"],
+                    choices=["manifest", "setbase", "activate", "deactivate", "rgb", "signals",
+                             "system-guard", "bootloader", "reset"],
                     help="run a single test instead of the full sequence "
-                         "(rgb and signals are never part of the full sequence — "
-                         "run them explicitly)")
+                         "(rgb, signals and the system tests are never part of the full "
+                         "sequence — run them explicitly; bootloader/reset REBOOT a half)")
+    ap.add_argument("--target", default="central",
+                    help="bootloader/reset target: 'central' (default) or a peripheral "
+                         "slot number (0 = the other half on a normal split)")
     ap.add_argument("--signal-seconds", type=int, default=15,
                     help="how long `--only signals` listens for key-pressed signals")
     args = ap.parse_args()
@@ -483,6 +553,12 @@ def main():
             test_rgb(dev)
         elif args.only == "signals":
             test_signals(dev, args.signal_seconds)
+        elif args.only == "system-guard":
+            test_system_guard(dev)
+        elif args.only in ("bootloader", "reset"):
+            target = SYSTEM_TARGET_CENTRAL if args.target == "central" else int(args.target, 0)
+            cmd = CMD_SYSTEM_BOOTLOADER if args.only == "bootloader" else CMD_SYSTEM_RESET
+            test_system(dev, cmd, target)
         else:
             test_manifest(dev)
             test_setbase(dev, args.layer)

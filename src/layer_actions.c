@@ -12,6 +12,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include "capabilities.h"
 #include "hid_viz_send.h"
+#include "zmk_compat.h"
 
 /*
  * Layer action commands (M1 additions). A second listener on
@@ -63,18 +64,18 @@ static void handle_set_base(uint8_t layer) {
      * the target, like the TO() keymap behavior. Layers held by physical keys
      * (MO/MT) are unaffected. There is no setter for the compile-time default
      * layer in this fork, so this is the closest "set base" semantics. */
-    zmk_keymap_layer_to(layer);
+    HID_VIZ_LAYER_TO(layer);
 }
 
 static void handle_activate(uint16_t ref, uint8_t layer) {
     LOG_INF("Command: layer activate ref=0x%04x index=%u", ref, layer);
-    int ret = zmk_keymap_layer_activate(layer);
+    int ret = HID_VIZ_LAYER_ACTIVATE(layer);
     send_confirm(ref, (ret == 0) ? HID_VIZ_OK : HID_VIZ_FAIL);
 }
 
 static void handle_deactivate(uint16_t ref, uint8_t layer) {
     LOG_INF("Command: layer deactivate ref=0x%04x index=%u", ref, layer);
-    int ret = zmk_keymap_layer_deactivate(layer);
+    int ret = HID_VIZ_LAYER_DEACTIVATE(layer);
     send_confirm(ref, (ret == 0) ? HID_VIZ_OK : HID_VIZ_FAIL);
 }
 
